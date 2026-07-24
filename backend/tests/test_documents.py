@@ -1,7 +1,9 @@
 ﻿from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
+from pypdf import PdfWriter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -65,6 +67,33 @@ def sample_pdf_bytes() -> bytes:
         b"endobj\n"
         b"%%EOF"
     )
+def blank_pdf_bytes(page_count: int = 2) -> bytes:
+    output = BytesIO()
+    writer = PdfWriter()
+    for _ in range(page_count):
+        writer.add_blank_page(
+            width=612,
+            height=792,
+        )
+    writer.write(output)
+    return output.getvalue()
+def upload_pdf(
+    client: TestClient,
+    headers: dict[str, str],
+    filename: str,
+    content: bytes,
+):
+    return client.post(
+        "/api/documents/upload",
+        headers=headers,
+        files={
+            "file": (
+                filename,
+                content,
+                "application/pdf",
+            )
+        },
+    )
 def test_document_upload_requires_authentication() -> None:
     with TestClient(app) as client:
         response = client.post(
@@ -81,16 +110,11 @@ def test_document_upload_requires_authentication() -> None:
 def test_admin_can_upload_pdf() -> None:
     headers = create_admin_authorization_header()
     with TestClient(app) as client:
-        response = client.post(
-            "/api/documents/upload",
+        response = upload_pdf(
+            client=client,
             headers=headers,
-            files={
-                "file": (
-                    "leave-policy.pdf",
-                    sample_pdf_bytes(),
-                    "application/pdf",
-                )
-            },
+            filename="leave-policy.pdf",
+            content=sample_pdf_bytes(),
         )
     assert response.status_code == 201
     response_body = response.json()
@@ -100,29 +124,18 @@ def test_admin_can_upload_pdf() -> None:
     assert response_body["size_bytes"] > 0
 def test_duplicate_pdf_is_rejected() -> None:
     headers = create_admin_authorization_header()
-    upload = {
-        "file": (
-            "policy.pdf",
-            sample_pdf_bytes(),
-            "application/pdf",
-        )
-    }
     with TestClient(app) as client:
-        first_response = client.post(
-            "/api/documents/upload",
+        first_response = upload_pdf(
+            client=client,
             headers=headers,
-            files=upload,
+            filename="policy.pdf",
+            content=sample_pdf_bytes(),
         )
-        second_response = client.post(
-            "/api/documents/upload",
+        second_response = upload_pdf(
+            client=client,
             headers=headers,
-            files={
-                "file": (
-                    "same-policy.pdf",
-                    sample_pdf_bytes(),
-                    "application/pdf",
-                )
-            },
+            filename="same-policy.pdf",
+            content=sample_pdf_bytes(),
         )
     assert first_response.status_code == 201
     assert second_response.status_code == 409
@@ -141,4 +154,47 @@ def test_non_pdf_file_is_rejected() -> None:
             },
         )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Only PDF files are allowed."
+    assert response.json()["detail"] == (
+        "Only PDF files are allowed."
+    )
+def test_document_processing_requires_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/documents/1/process"
+        )
+    assert response.status_code == 401
+def test_admin_can_process_blank_pdf() -> None:
+    headers = create_admin_authorization_header()
+    with TestClient(app) as client:
+        upload_response = upload_pdf(
+            client=client,
+            headers=headers,
+            filename="blank-policy.pdf",
+            content=blank_pdf_bytes(page_count=2),
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        process_response = client.post(
+            f"/api/documents/{document_id}/process",
+            headers=headers,
+        )
+        pages_response = client.get(
+            f"/api/documents/{document_id}/pages",
+            headers=headers,
+        )
+    assert process_response.status_code == 200
+    process_body = process_response.json()
+    assert process_body["page_count"] == 2
+    assert process_body["status"] == "needs_ocr"
+    assert process_body["text_pages"] == 0
+    assert process_body["total_characters"] == 0
+    assert pages_response.status_code == 200
+    assert len(pages_response.json()) == 2
+def test_missing_document_processing_returns_404() -> None:
+    headers = create_admin_authorization_header()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/documents/999/process",
+            headers=headers,
+        )
+    assert response.status_code == 404
