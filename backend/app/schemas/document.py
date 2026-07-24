@@ -57,3 +57,31 @@ class DocumentSearchResult(BaseModel):
     chunk_index: int
     distance: float
     text: str
+class DocumentAskRequest(BaseModel):
+    question: str = Field(
+        min_length=3,
+        max_length=2000,
+    )
+    document_id: int | None = Field(
+        default=None,
+        ge=1,
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+    )
+class AnswerCitation(BaseModel):
+    source_id: str
+    document_id: int
+    document_name: str
+    page_number: int
+    chunk_index: int
+    text_preview: str
+class DocumentAnswerResponse(BaseModel):
+    question: str
+    answer: str
+    answer_found: bool
+    citations: list[AnswerCitation]
+    retrieved_chunks: int
+    model: str

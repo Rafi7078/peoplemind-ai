@@ -39,6 +39,21 @@ class Settings(BaseSettings):
         ge=1,
         le=64,
     )
+    rag_top_k: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+    )
+    rag_max_distance: float = Field(
+        default=1.1,
+        gt=0,
+        le=4,
+    )
+    rag_max_context_chars: int = Field(
+        default=6000,
+        ge=1000,
+        le=20000,
+    )
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8-sig",

@@ -11,6 +11,8 @@ from backend.app.api.dependencies import (
     DatabaseDependency,
 )
 from backend.app.schemas.document import (
+    DocumentAnswerResponse,
+    DocumentAskRequest,
     DocumentChunkPreview,
     DocumentIndexResult,
     DocumentPagePreview,
@@ -19,6 +21,7 @@ from backend.app.schemas.document import (
     DocumentSearchRequest,
     DocumentSearchResult,
 )
+from backend.app.services import rag_answer_service
 from backend.app.services.document_index_service import (
     DocumentIndexingError,
     DocumentSearchError,
@@ -119,6 +122,29 @@ def search_documents(
         DocumentSearchResult.model_validate(result)
         for result in results
     ]
+@router.post(
+    "/ask",
+    response_model=DocumentAnswerResponse,
+    summary="Ask an evidence-grounded document question",
+)
+def ask_documents(
+    request: DocumentAskRequest,
+    current_user: CurrentUserDependency,
+) -> DocumentAnswerResponse:
+    try:
+        result = (
+            rag_answer_service.answer_document_question(
+                question=request.question,
+                document_id=request.document_id,
+                top_k=request.top_k,
+            )
+        )
+    except rag_answer_service.RagAnswerError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    return DocumentAnswerResponse.model_validate(result)
 @router.post(
     "/{document_id}/process",
     response_model=DocumentProcessResult,

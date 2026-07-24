@@ -27,7 +27,7 @@ app = FastAPI(
         "Backend API for the PeopleMind AI HR Intelligence "
         "and Management Assistant."
     ),
-    version="0.5.0",
+    version="0.6.0",
     debug=settings.app_debug,
     lifespan=lifespan,
 )
@@ -44,5 +44,5 @@ def health_check() -> dict[str, str]:
     return {
         "service": "PeopleMind AI API",
         "status": "healthy",
-        "version": "0.5.0",
+        "version": "0.6.0",
     }
