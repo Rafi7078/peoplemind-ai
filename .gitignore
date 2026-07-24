@@ -1,0 +1,37 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+# Virtual environment
+.venv/
+venv/
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+# Database
+*.db
+*.sqlite
+*.sqlite3
+# User-uploaded files
+data/uploads/*
+!data/uploads/.gitkeep
+# Local vector database
+data/vector_store/*
+!data/vector_store/.gitkeep
+# Node and React
+node_modules/
+frontend/dist/
+frontend/.vite/
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# Logs
+*.log
+logs/
