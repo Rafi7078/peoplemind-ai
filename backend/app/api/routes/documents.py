@@ -11,9 +11,20 @@ from backend.app.api.dependencies import (
     DatabaseDependency,
 )
 from backend.app.schemas.document import (
+    DocumentChunkPreview,
+    DocumentIndexResult,
     DocumentPagePreview,
     DocumentProcessResult,
     DocumentRead,
+    DocumentSearchRequest,
+    DocumentSearchResult,
+)
+from backend.app.services.document_index_service import (
+    DocumentIndexingError,
+    DocumentSearchError,
+    index_document,
+    list_document_chunks,
+    search_document_chunks,
 )
 from backend.app.services.document_service import (
     DocumentValidationError,
@@ -37,12 +48,8 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
     summary="Upload an HR PDF document",
     responses={
-        400: {
-            "description": "Invalid PDF upload",
-        },
-        409: {
-            "description": "Duplicate PDF document",
-        },
+        400: {"description": "Invalid PDF upload"},
+        409: {"description": "Duplicate PDF document"},
     },
 )
 async def upload_document(
@@ -89,17 +96,33 @@ def read_documents(
         for document in documents
     ]
 @router.post(
+    "/search",
+    response_model=list[DocumentSearchResult],
+    summary="Run semantic search over indexed documents",
+)
+def search_documents(
+    request: DocumentSearchRequest,
+    current_user: CurrentUserDependency,
+) -> list[DocumentSearchResult]:
+    try:
+        results = search_document_chunks(
+            query=request.query,
+            document_id=request.document_id,
+            top_k=request.top_k,
+        )
+    except DocumentSearchError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    return [
+        DocumentSearchResult.model_validate(result)
+        for result in results
+    ]
+@router.post(
     "/{document_id}/process",
     response_model=DocumentProcessResult,
     summary="Extract page text from an uploaded PDF",
-    responses={
-        404: {
-            "description": "Document not found",
-        },
-        422: {
-            "description": "PDF processing failed",
-        },
-    },
 )
 def process_document(
     document_id: int,
@@ -126,11 +149,6 @@ def process_document(
     "/{document_id}/pages",
     response_model=list[DocumentPagePreview],
     summary="Preview extracted PDF pages",
-    responses={
-        404: {
-            "description": "Document not found",
-        },
-    },
 )
 def read_document_pages(
     document_id: int,
@@ -154,4 +172,59 @@ def read_document_pages(
             text_preview=page.text[:500],
         )
         for page in pages
+    ]
+@router.post(
+    "/{document_id}/index",
+    response_model=DocumentIndexResult,
+    summary="Chunk, embed and index a processed PDF",
+)
+def create_document_index(
+    document_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> DocumentIndexResult:
+    try:
+        result = index_document(
+            database=database,
+            document_id=document_id,
+        )
+    except DocumentNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    except DocumentIndexingError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+    return DocumentIndexResult.model_validate(result)
+@router.get(
+    "/{document_id}/chunks",
+    response_model=list[DocumentChunkPreview],
+    summary="Preview indexed document chunks",
+)
+def read_document_chunks(
+    document_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> list[DocumentChunkPreview]:
+    try:
+        chunks = list_document_chunks(
+            database=database,
+            document_id=document_id,
+        )
+    except DocumentNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    return [
+        DocumentChunkPreview(
+            page_number=chunk.page_number,
+            chunk_index=chunk.chunk_index,
+            char_count=chunk.char_count,
+            text_preview=chunk.text[:500],
+        )
+        for chunk in chunks
     ]

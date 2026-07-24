@@ -22,6 +22,23 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
     )
+    vector_store_dir: str = "data/vector_store"
+    vector_collection_name: str = "peoplemind_hr_documents"
+    chunk_size: int = Field(
+        default=1000,
+        ge=300,
+        le=4000,
+    )
+    chunk_overlap: int = Field(
+        default=200,
+        ge=0,
+        le=1000,
+    )
+    embedding_batch_size: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+    )
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8-sig",
