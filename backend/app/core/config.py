@@ -11,7 +11,17 @@ class Settings(BaseSettings):
     ollama_embedding_model: str = "embeddinggemma"
     jwt_secret_key: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = Field(default=30, ge=5, le=1440)
+    access_token_expire_minutes: int = Field(
+        default=30,
+        ge=5,
+        le=1440,
+    )
+    document_upload_dir: str = "data/uploads"
+    max_document_size_mb: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+    )
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8-sig",

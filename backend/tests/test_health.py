@@ -5,4 +5,4 @@ def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
-    assert response.json()["version"] == "0.2.0"
+    assert response.json()["version"] == "0.3.0"
