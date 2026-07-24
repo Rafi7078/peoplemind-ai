@@ -1,6 +1,7 @@
-﻿from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.routes.auth import router as auth_router
 from backend.app.api.routes.documents import (
     router as documents_router,
@@ -31,6 +32,21 @@ app = FastAPI(
     debug=settings.app_debug,
     lifespan=lifespan,
 )
+
+allowed_origins = [
+    origin.strip()
+    for origin in settings.cors_origins.split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth_router)
 app.include_router(documents_router)
 @app.get("/")

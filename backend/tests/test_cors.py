@@ -1,0 +1,29 @@
+from fastapi.testclient import TestClient
+from backend.app.main import app
+client = TestClient(app)
+def test_frontend_origin_is_allowed() -> None:
+    origin = "http://localhost:5173"
+    response = client.options(
+        "/api/health",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == origin
+    )
+def test_unknown_origin_is_not_allowed() -> None:
+    response = client.options(
+        "/api/health",
+        headers={
+            "Origin": "https://malicious.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert (
+        "access-control-allow-origin"
+        not in response.headers
+    )

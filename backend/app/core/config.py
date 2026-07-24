@@ -1,10 +1,14 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "PeopleMind AI"
     app_env: str = "development"
     app_debug: bool = True
+    cors_origins: str = (
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173"
+    )
     database_url: str = "sqlite:///./peoplemind.db"
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "qwen3:4b-instruct"
