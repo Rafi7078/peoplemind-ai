@@ -3,8 +3,10 @@
   Route,
   Routes,
 } from "react-router-dom";
+import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DocumentAssistantPage } from "./pages/DocumentAssistantPage";
 import { LoginPage } from "./pages/LoginPage";
 function App() {
   return (
@@ -14,10 +16,18 @@ function App() {
         path="/login"
       />
       <Route element={<ProtectedRoute />}>
-        <Route
-          element={<DashboardPage />}
-          path="/"
-        />
+        <Route element={<AppShell />}>
+          <Route
+            element={<DashboardPage />}
+            index
+          />
+          <Route
+            element={
+              <DocumentAssistantPage />
+            }
+            path="documents"
+          />
+        </Route>
       </Route>
       <Route
         element={
