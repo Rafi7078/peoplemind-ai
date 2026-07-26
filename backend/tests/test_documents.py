@@ -1,4 +1,4 @@
-﻿from collections.abc import Generator
+from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
 import pytest
@@ -198,3 +198,46 @@ def test_missing_document_processing_returns_404() -> None:
             headers=headers,
         )
     assert response.status_code == 404
+
+def test_admin_can_open_original_pdf_inline() -> None:
+    headers = create_admin_authorization_header()
+    pdf_content = blank_pdf_bytes(
+        page_count=1
+    )
+    with TestClient(app) as client:
+        upload_response = upload_pdf(
+            client=client,
+            headers=headers,
+            filename=(
+                "Maternity Leave Policy "
+                "- Bangladesh - Jul 2026.pdf"
+            ),
+            content=pdf_content,
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        file_response = client.get(
+            f"/api/documents/{document_id}/file",
+            headers=headers,
+        )
+    assert file_response.status_code == 200
+    assert (
+        file_response.headers["content-type"]
+        == "application/pdf"
+    )
+    assert file_response.content == pdf_content
+    content_disposition = file_response.headers[
+        "content-disposition"
+    ]
+    assert content_disposition.startswith(
+        "inline;"
+    )
+    assert (
+        "Maternity%20Leave%20Policy%20"
+        "-%20Bangladesh%20-%20Jul%202026.pdf"
+        in content_disposition
+    )
+    assert (
+        file_response.headers["cache-control"]
+        == "private, no-store, max-age=0"
+    )

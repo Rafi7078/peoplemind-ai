@@ -1,6 +1,9 @@
-﻿import re
+import re
 from typing import Any
 from backend.app.core.config import settings
+from backend.app.services.conversation_router_service import (
+    get_conversation_reply,
+)
 from backend.app.services.document_index_service import (
     DocumentSearchError,
     search_document_chunks,
@@ -9,16 +12,26 @@ from backend.app.services.ollama_chat_service import (
     ChatServiceError,
     generate_grounded_answer,
 )
-FALLBACK_ANSWER = (
-    "আপলোড করা document-এ এই প্রশ্নের "
-    "নির্ভরযোগ্য উত্তর পাওয়া যায়নি।"
-)
+FALLBACK_ANSWER = "No supporting policy found"
 SOURCE_ID_PATTERN = re.compile(
     r"\bS\d+\b",
     flags=re.IGNORECASE,
 )
 class RagAnswerError(RuntimeError):
     pass
+def conversation_response(
+    question: str,
+    answer: str,
+) -> dict[str, Any]:
+    return {
+        "question": question,
+        "answer": answer,
+        "answer_found": False,
+        "response_type": "conversation",
+        "citations": [],
+        "retrieved_chunks": 0,
+        "model": "deterministic-router",
+    }
 def fallback_response(
     question: str,
     retrieved_chunks: int = 0,
@@ -27,6 +40,7 @@ def fallback_response(
         "question": question,
         "answer": FALLBACK_ANSWER,
         "answer_found": False,
+        "response_type": "no_supporting_policy",
         "citations": [],
         "retrieved_chunks": retrieved_chunks,
         "model": settings.ollama_chat_model,
@@ -48,8 +62,6 @@ def collect_valid_source_ids(
         str(source_id)
         for source_id in model_output.used_source_ids
     ]
-    # Recover citations written directly inside the answer,
-    # such as [S1], even when used_source_ids is empty.
     candidates.extend(
         SOURCE_ID_PATTERN.findall(
             model_output.answer
@@ -98,13 +110,24 @@ def build_evidence_context(
         context_blocks.append(block)
         current_character_count += len(block)
         source_map[source_id] = result
-    return "\n---\n".join(context_blocks), source_map
+    return (
+        "\n---\n".join(context_blocks),
+        source_map,
+    )
 def answer_document_question(
     question: str,
     document_id: int | None,
     top_k: int,
 ) -> dict[str, Any]:
     normalized_question = question.strip()
+    conversation_reply = get_conversation_reply(
+        normalized_question
+    )
+    if conversation_reply is not None:
+        return conversation_response(
+            question=normalized_question,
+            answer=conversation_reply.answer,
+        )
     try:
         search_results = search_document_chunks(
             query=normalized_question,
@@ -112,14 +135,20 @@ def answer_document_question(
             top_k=top_k,
         )
     except DocumentSearchError as error:
-        raise RagAnswerError(str(error)) from error
-    evidence_context, source_map = build_evidence_context(
-        search_results
+        raise RagAnswerError(
+            str(error)
+        ) from error
+    evidence_context, source_map = (
+        build_evidence_context(
+            search_results
+        )
     )
     if not source_map:
         return fallback_response(
             question=normalized_question,
-            retrieved_chunks=len(search_results),
+            retrieved_chunks=len(
+                search_results
+            ),
         )
     try:
         model_output = generate_grounded_answer(
@@ -127,7 +156,9 @@ def answer_document_question(
             evidence_context=evidence_context,
         )
     except ChatServiceError as error:
-        raise RagAnswerError(str(error)) from error
+        raise RagAnswerError(
+            str(error)
+        ) from error
     valid_source_ids = collect_valid_source_ids(
         model_output=model_output,
         source_map=source_map,
@@ -139,7 +170,9 @@ def answer_document_question(
     ):
         return fallback_response(
             question=normalized_question,
-            retrieved_chunks=len(source_map),
+            retrieved_chunks=len(
+                source_map
+            ),
         )
     citations: list[dict[str, Any]] = []
     for source_id in valid_source_ids:
@@ -147,18 +180,31 @@ def answer_document_question(
         citations.append(
             {
                 "source_id": source_id,
-                "document_id": source["document_id"],
-                "document_name": source["document_name"],
-                "page_number": source["page_number"],
-                "chunk_index": source["chunk_index"],
-                "text_preview": source["text"][:300],
+                "document_id": (
+                    source["document_id"]
+                ),
+                "document_name": (
+                    source["document_name"]
+                ),
+                "page_number": (
+                    source["page_number"]
+                ),
+                "chunk_index": (
+                    source["chunk_index"]
+                ),
+                "text_preview": (
+                    source["text"][:300]
+                ),
             }
         )
     return {
         "question": normalized_question,
         "answer": model_output.answer.strip(),
         "answer_found": True,
+        "response_type": "policy_guidance",
         "citations": citations,
-        "retrieved_chunks": len(source_map),
+        "retrieved_chunks": len(
+            source_map
+        ),
         "model": settings.ollama_chat_model,
     }

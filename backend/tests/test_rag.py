@@ -1,4 +1,4 @@
-﻿from collections.abc import Generator
+from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -131,6 +131,7 @@ def test_admin_can_call_ask_endpoint(
             "question": kwargs["question"],
             "answer": "The website was deployed on Vercel [S1].",
             "answer_found": True,
+            "response_type": "policy_guidance",
             "citations": [
                 {
                     "source_id": "S1",
@@ -158,3 +159,105 @@ def test_admin_can_call_ask_endpoint(
     assert response.status_code == 200
     assert response.json()["answer_found"] is True
     assert response.json()["citations"][0]["page_number"] == 2
+
+def test_greeting_bypasses_search_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_search(**kwargs):
+        raise AssertionError(
+            "Greeting must not run vector search."
+        )
+    monkeypatch.setattr(
+        rag_service,
+        "search_document_chunks",
+        fail_search,
+    )
+    result = rag_service.answer_document_question(
+        question="Hello!",
+        document_id=None,
+        top_k=5,
+    )
+    assert result["response_type"] == "conversation"
+    assert result["answer_found"] is False
+    assert result["citations"] == []
+    assert result["retrieved_chunks"] == 0
+    assert result["model"] == "deterministic-router"
+def test_mixed_greeting_and_policy_question_uses_rag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search_called = False
+    def fake_search(**kwargs):
+        nonlocal search_called
+        search_called = True
+        return [
+            {
+                "vector_id": "vector-maternity",
+                "document_id": 7,
+                "document_name": (
+                    "Maternity Leave Policy "
+                    "- Bangladesh - Jul 2026.pdf"
+                ),
+                "page_number": 1,
+                "chunk_index": 0,
+                "distance": 0.10,
+                "text": (
+                    "Eligible employees receive "
+                    "16 weeks of maternity leave."
+                ),
+            }
+        ]
+    monkeypatch.setattr(
+        rag_service,
+        "search_document_chunks",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        rag_service,
+        "generate_grounded_answer",
+        lambda **kwargs: GroundedModelOutput(
+            answerable=True,
+            answer=(
+                "Eligible employees receive "
+                "16 weeks of maternity leave [S1]."
+            ),
+            used_source_ids=["S1"],
+        ),
+    )
+    result = rag_service.answer_document_question(
+        question=(
+            "Good morning, what is the "
+            "maternity leave entitlement?"
+        ),
+        document_id=None,
+        top_k=5,
+    )
+    assert search_called is True
+    assert (
+        result["response_type"]
+        == "policy_guidance"
+    )
+    assert result["answer_found"] is True
+    assert len(result["citations"]) == 1
+def test_admin_can_send_short_greeting() -> None:
+    headers = create_authorization_header()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/documents/ask",
+            headers=headers,
+            json={
+                "question": "Hi",
+                "document_id": None,
+                "top_k": 5,
+            },
+        )
+    assert response.status_code == 200
+    response_body = response.json()
+    assert (
+        response_body["response_type"]
+        == "conversation"
+    )
+    assert response_body["citations"] == []
+    assert (
+        response_body["model"]
+        == "deterministic-router"
+    )

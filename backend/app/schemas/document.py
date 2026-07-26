@@ -1,4 +1,5 @@
-﻿from datetime import datetime
+from typing import Literal
+from datetime import datetime
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -59,7 +60,7 @@ class DocumentSearchResult(BaseModel):
     text: str
 class DocumentAskRequest(BaseModel):
     question: str = Field(
-        min_length=3,
+        min_length=1,
         max_length=2000,
     )
     document_id: int | None = Field(
@@ -82,6 +83,11 @@ class DocumentAnswerResponse(BaseModel):
     question: str
     answer: str
     answer_found: bool
+    response_type: Literal[
+        "conversation",
+        "policy_guidance",
+        "no_supporting_policy",
+    ]
     citations: list[AnswerCitation]
     retrieved_chunks: int
     model: str

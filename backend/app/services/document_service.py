@@ -1,4 +1,4 @@
-﻿from hashlib import sha256
+from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 from fastapi import UploadFile
@@ -136,3 +136,37 @@ async def store_pdf_document(
         if temporary_path.exists():
             temporary_path.unlink()
         await upload.close()
+
+class DocumentFileNotFoundError(FileNotFoundError):
+    pass
+def get_document_file(
+    database: Session,
+    document_id: int,
+) -> tuple[Document, Path]:
+    document = database.get(
+        Document,
+        document_id,
+    )
+    if document is None:
+        raise DocumentFileNotFoundError(
+            "The requested document was not found."
+        )
+    upload_directory = Path(
+        settings.document_upload_dir
+    ).resolve()
+    document_path = Path(
+        document.file_path
+    ).resolve()
+    try:
+        document_path.relative_to(
+            upload_directory
+        )
+    except ValueError as error:
+        raise DocumentFileNotFoundError(
+            "The requested document file is unavailable."
+        ) from error
+    if not document_path.is_file():
+        raise DocumentFileNotFoundError(
+            "The requested document file is unavailable."
+        )
+    return document, document_path

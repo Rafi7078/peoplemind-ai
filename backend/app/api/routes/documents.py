@@ -1,4 +1,6 @@
-﻿from typing import Annotated
+from typing import Annotated
+from urllib.parse import quote
+from fastapi.responses import FileResponse
 from fastapi import (
     APIRouter,
     File,
@@ -30,8 +32,10 @@ from backend.app.services.document_index_service import (
     search_document_chunks,
 )
 from backend.app.services.document_service import (
+    DocumentFileNotFoundError,
     DocumentValidationError,
     DuplicateDocumentError,
+    get_document_file,
     list_documents,
     store_pdf_document,
 )
@@ -145,6 +149,52 @@ def ask_documents(
             detail=str(error),
         ) from error
     return DocumentAnswerResponse.model_validate(result)
+
+@router.get(
+    "/{document_id}/file",
+    response_class=FileResponse,
+    summary="Open the original policy PDF securely",
+    responses={
+        404: {
+            "description": (
+                "Document or stored PDF file not found"
+            )
+        },
+    },
+)
+def read_document_file(
+    document_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> FileResponse:
+    try:
+        document, document_path = (
+            get_document_file(
+                database=database,
+                document_id=document_id,
+            )
+        )
+    except DocumentFileNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    encoded_filename = quote(
+        document.original_name
+    )
+    return FileResponse(
+        path=document_path,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                "inline; "
+                f"filename*=UTF-8''{encoded_filename}"
+            ),
+            "Cache-Control": (
+                "private, no-store, max-age=0"
+            ),
+        },
+    )
 @router.post(
     "/{document_id}/process",
     response_model=DocumentProcessResult,
