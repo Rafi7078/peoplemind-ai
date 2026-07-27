@@ -9,6 +9,7 @@ import type {
 } from "react";
 import {
   askDocumentQuestion,
+  fetchDocumentFile,
   indexDocument,
   listDocuments,
   processDocument,
@@ -38,6 +39,49 @@ function formatDate(value: string): string {
       timeStyle: "short",
     },
   ).format(new Date(value));
+}
+type PolicyDisplayMetadata = {
+  title: string;
+  documentDate: string | null;
+};
+function getPolicyDisplayMetadata(
+  filename: string,
+): PolicyDisplayMetadata {
+  const filenameWithoutExtension =
+    filename.replace(/\.pdf$/i, "");
+  const datedFilenamePattern =
+    /^(.*?)\s+-\s+((?:\d{1,2}\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})$/i;
+  const match =
+    filenameWithoutExtension.match(
+      datedFilenamePattern,
+    );
+  if (!match) {
+    return {
+      title: filenameWithoutExtension,
+      documentDate: null,
+    };
+  }
+  return {
+    title: match[1].trim(),
+    documentDate: match[2].trim(),
+  };
+}
+function formatSourceNumber(
+  sourceId: string,
+): string {
+  const sourceNumber = sourceId.replace(
+    /^S/i,
+    "",
+  );
+  return `[${sourceNumber}]`;
+}
+function formatPolicyAnswer(
+  answer: string,
+): string {
+  return answer.replace(
+    /\[S(\d+)\]/gi,
+    "[$1]",
+  );
 }
 function statusClass(status: string): string {
   switch (status.toLowerCase()) {
@@ -96,6 +140,8 @@ export function DocumentAssistantPage() {
     selectedDocumentId,
     setSelectedDocumentId,
   ] = useState<number | null>(null);
+  const [searchScope, setSearchScope] =
+    useState<"all" | "selected">("all");
   const [question, setQuestion] =
     useState("");
   const [answer, setAnswer] =
@@ -336,23 +382,9 @@ export function DocumentAssistantPage() {
     event.preventDefault();
     const normalizedQuestion =
       question.trim();
-    if (!selectedDocument) {
+    if (normalizedQuestion.length < 1) {
       setErrorMessage(
-        "Select a document first.",
-      );
-      return;
-    }
-    if (
-      selectedDocument.status !== "indexed"
-    ) {
-      setErrorMessage(
-        "Process and index the selected document before asking questions.",
-      );
-      return;
-    }
-    if (normalizedQuestion.length < 3) {
-      setErrorMessage(
-        "Enter a complete question.",
+        "Enter a message or policy question.",
       );
       return;
     }
@@ -365,7 +397,11 @@ export function DocumentAssistantPage() {
         await askDocumentQuestion({
           question: normalizedQuestion,
           document_id:
-            selectedDocument.id,
+            searchScope === "selected" &&
+            selectedDocument?.status ===
+              "indexed"
+              ? selectedDocument.id
+              : null,
           top_k: 5,
         });
       setAnswer(result);
@@ -374,6 +410,49 @@ export function DocumentAssistantPage() {
         getApiErrorMessage(
           error,
           "Question answering failed.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleOpenPolicy(
+    documentId: number,
+    pageNumber: number,
+  ): Promise<void> {
+    const policyWindow = window.open(
+      "about:blank",
+      "_blank",
+    );
+    if (!policyWindow) {
+      setErrorMessage(
+        "Your browser blocked the policy window. Allow pop-ups and try again.",
+      );
+      return;
+    }
+    policyWindow.opener = null;
+    const actionKey =
+      `open:${documentId}:${pageNumber}`;
+    setBusyAction(actionKey);
+    setErrorMessage("");
+    setActivityMessage("");
+    try {
+      const policyBlob =
+        await fetchDocumentFile(documentId);
+      const objectUrl =
+        URL.createObjectURL(policyBlob);
+      policyWindow.location.replace(
+        `${objectUrl}#page=${pageNumber}`,
+      );
+      window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 300_000);
+    } catch (error) {
+      policyWindow.close();
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not open the referenced policy.",
         ),
       );
     } finally {
@@ -496,6 +575,11 @@ export function DocumentAssistantPage() {
                     setSelectedDocumentId(
                       document.id,
                     );
+                    if (
+                      document.status !== "indexed"
+                    ) {
+                      setSearchScope("all");
+                    }
                     setAnswer(null);
                     setErrorMessage("");
                     setActivityMessage("");
@@ -637,12 +721,13 @@ export function DocumentAssistantPage() {
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div>
                   <h2 className="text-xl font-bold text-slate-950">
-                    Ask this document
+                    Ask PeopleMind AI
                   </h2>
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    The answer must be supported by
-                    retrieved evidence from the
-                    selected document.
+                    Ask a company-policy question or
+                    send a greeting. Policy answers
+                    are always grounded in indexed
+                    company documents.
                   </p>
                 </div>
                 <form
@@ -660,107 +745,195 @@ export function DocumentAssistantPage() {
                     value={question}
                   />
                   <div className="mt-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <p className="text-xs text-slate-500">
-                      Selected document ID:{" "}
-                      {selectedDocument.id}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Search scope
+                      </p>
+                      <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-100 p-1">
+                        <button
+                          className={[
+                            "rounded-lg px-3 py-2 text-xs font-semibold transition",
+                            searchScope === "all"
+                              ? "bg-white text-sky-700 shadow-sm"
+                              : "text-slate-600 hover:text-slate-900",
+                          ].join(" ")}
+                          onClick={() => {
+                            setSearchScope("all");
+                            setAnswer(null);
+                            setErrorMessage("");
+                          }}
+                          type="button"
+                        >
+                          All company policies
+                        </button>
+                        <button
+                          className={[
+                            "rounded-lg px-3 py-2 text-xs font-semibold transition",
+                            searchScope === "selected"
+                              ? "bg-white text-sky-700 shadow-sm"
+                              : "text-slate-600 hover:text-slate-900",
+                          ].join(" ")}
+                          disabled={
+                            selectedDocument.status !==
+                            "indexed"
+                          }
+                          onClick={() => {
+                            setSearchScope(
+                              "selected",
+                            );
+                            setAnswer(null);
+                            setErrorMessage("");
+                          }}
+                          type="button"
+                        >
+                          This policy only
+                        </button>
+                      </div>
+                      <p className="max-w-md break-words text-xs text-slate-500">
+                        {searchScope === "all"
+                          ? "Searching across all indexed company policies."
+                          : `Searching only: ${selectedDocument.original_name.replace(
+                              /\.pdf$/i,
+                              "",
+                            )}`}
+                      </p>
+                    </div>
                     <button
                       className="rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={
-                        busyAction !== null ||
-                        selectedDocument.status !==
-                          "indexed"
+                        busyAction !== null
                       }
                       type="submit"
                     >
                       {busyAction === "ask"
                         ? "Generating answer..."
-                        : "Ask with citations"}
+                        : "Ask PeopleMind AI"}
                     </button>
                   </div>
                 </form>
               </section>
               {answer ? (
-                <section
-                  className={[
-                    "rounded-3xl border p-6 shadow-sm",
-                    answer.answer_found
-                      ? "border-emerald-200 bg-white"
-                      : "border-amber-200 bg-amber-50",
-                  ].join(" ")}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-xl font-bold text-slate-950">
-                      Answer
-                    </h2>
-                    <span
-                      className={[
-                        "rounded-full px-3 py-1 text-xs font-semibold",
-                        answer.answer_found
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700",
-                      ].join(" ")}
-                    >
-                      {answer.answer_found
-                        ? "Evidence found"
-                        : "Reliable evidence unavailable"}
-                    </span>
-                  </div>
-                  <p className="mt-5 whitespace-pre-wrap text-base leading-8 text-slate-800">
-                    {answer.answer}
-                  </p>
-                  <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-500">
-                    <span>
-                      Model: {answer.model}
-                    </span>
-                    <span>
-                      Retrieved chunks:{" "}
-                      {answer.retrieved_chunks}
-                    </span>
-                  </div>
-                  {answer.citations.length > 0 ? (
-                    <div className="mt-6">
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">
-                        Sources
-                      </h3>
-                      <div className="mt-3 space-y-3">
-                        {answer.citations.map(
-                          (citation) => (
-                            <article
-                              className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                              key={`${citation.source_id}-${citation.chunk_index}`}
-                            >
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-slate-950 px-2.5 py-1 text-xs font-bold text-white">
-                                  {
-                                    citation.source_id
-                                  }
-                                </span>
-                                <span className="text-sm font-semibold text-slate-700">
-                                  Page{" "}
-                                  {
-                                    citation.page_number
-                                  }
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  Chunk{" "}
-                                  {
-                                    citation.chunk_index
-                                  }
-                                </span>
-                              </div>
-                              <p className="mt-3 break-words text-sm leading-6 text-slate-600">
-                                {
-                                  citation.text_preview
-                                }
-                              </p>
-                            </article>
-                          ),
-                        )}
-                      </div>
-                    </div>
+                <>
+                  {answer.response_type ===
+                  "conversation" ? (
+                    <section className="rounded-3xl border border-sky-200 bg-sky-50 p-6 shadow-sm">
+                      <p className="text-sm font-bold uppercase tracking-[0.16em] text-sky-700">
+                        PeopleMind AI
+                      </p>
+                      <p className="mt-4 whitespace-pre-wrap text-base leading-8 text-slate-800">
+                        {answer.answer}
+                      </p>
+                    </section>
                   ) : null}
-                </section>
+                  {answer.response_type ===
+                  "no_supporting_policy" ? (
+                    <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+                      <div className="flex items-start gap-4">
+                        <div
+                          aria-hidden="true"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-lg font-bold text-amber-700"
+                        >
+                          !
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold text-slate-950">
+                            No supporting policy found
+                          </h2>
+                          <p className="mt-2 max-w-2xl leading-7 text-slate-600">
+                            We could not find sufficient
+                            information in the available
+                            company policies to answer this
+                            question reliably. Try rephrasing
+                            the question or selecting a more
+                            relevant policy.
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+                  {answer.response_type ===
+                  "policy_guidance" ? (
+                    <section className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-700">
+                          Policy Guidance
+                        </p>
+                        <p className="mt-5 whitespace-pre-wrap text-base leading-8 text-slate-800">
+                          {formatPolicyAnswer(
+                            answer.answer,
+                          )}
+                        </p>
+                      </div>
+                      {answer.citations.length >
+                      0 ? (
+                        <div className="mt-8 border-t border-slate-200 pt-6">
+                          <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-700">
+                            Supporting References
+                          </h3>
+                          <div className="mt-4 space-y-4">
+                            {answer.citations.map(
+                              (citation) => {
+                                const metadata =
+                                  getPolicyDisplayMetadata(
+                                    citation.document_name,
+                                  );
+                                const actionKey =
+                                  `open:${citation.document_id}:${citation.page_number}`;
+                                return (
+                                  <article
+                                    className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                                    key={`${citation.source_id}-${citation.document_id}-${citation.page_number}-${citation.chunk_index}`}
+                                  >
+                                    <div className="flex items-start gap-3">
+                                      <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 px-2 text-xs font-bold text-white">
+                                        {formatSourceNumber(
+                                          citation.source_id,
+                                        )}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <h4 className="break-words text-base font-bold text-slate-900">
+                                          {metadata.title}
+                                        </h4>
+                                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                                          {metadata.documentDate
+                                            ? `Document date: ${metadata.documentDate} ? `
+                                            : ""}
+                                          Referenced on page{" "}
+                                          {
+                                            citation.page_number
+                                          }
+                                        </p>
+                                        <button
+                                          className="mt-4 inline-flex items-center gap-2 rounded-lg text-sm font-bold text-sky-700 transition hover:text-sky-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                          disabled={
+                                            busyAction !==
+                                            null
+                                          }
+                                          onClick={() => {
+                                            void handleOpenPolicy(
+                                              citation.document_id,
+                                              citation.page_number,
+                                            );
+                                          }}
+                                          type="button"
+                                        >
+                                          {busyAction ===
+                                          actionKey
+                                            ? "Opening policy..."
+                                            : "View referenced policy ?"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </article>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </>
               ) : null}
             </>
           )}

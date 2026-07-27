@@ -1,4 +1,4 @@
-﻿import httpx
+import httpx
 from backend.app.core.config import settings
 class EmbeddingServiceError(RuntimeError):
     pass

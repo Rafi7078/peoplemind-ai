@@ -101,3 +101,16 @@ export async function askDocumentQuestion(
     );
   return response.data;
 }
+
+export async function fetchDocumentFile(
+  documentId: number,
+): Promise<Blob> {
+  const response = await apiClient.get<Blob>(
+    `/api/documents/${documentId}/file`,
+    {
+      responseType: "blob",
+      timeout: 120_000,
+    },
+  );
+  return response.data;
+}

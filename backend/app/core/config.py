@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "qwen3:4b-instruct"
     ollama_embedding_model: str = "embeddinggemma"
+    ollama_keep_alive: str = "30m"
     jwt_secret_key: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(

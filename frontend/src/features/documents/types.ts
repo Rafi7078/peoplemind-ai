@@ -1,4 +1,4 @@
-﻿export type DocumentRead = {
+export type DocumentRead = {
   id: number;
   original_name: string;
   size_bytes: number;
@@ -60,10 +60,15 @@ export type AnswerCitation = {
   chunk_index: number;
   text_preview: string;
 };
+export type DocumentResponseType =
+  | "conversation"
+  | "policy_guidance"
+  | "no_supporting_policy";
 export type DocumentAnswerResponse = {
   question: string;
   answer: string;
   answer_found: boolean;
+  response_type: DocumentResponseType;
   citations: AnswerCitation[];
   retrieved_chunks: number;
   model: string;

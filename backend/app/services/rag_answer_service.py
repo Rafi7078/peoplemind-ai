@@ -1,4 +1,5 @@
 import re
+from time import perf_counter
 from typing import Any
 from backend.app.core.config import settings
 from backend.app.services.conversation_router_service import (
@@ -128,6 +129,8 @@ def answer_document_question(
             question=normalized_question,
             answer=conversation_reply.answer,
         )
+    request_started = perf_counter()
+    search_started = perf_counter()
     try:
         search_results = search_document_chunks(
             query=normalized_question,
@@ -138,10 +141,20 @@ def answer_document_question(
         raise RagAnswerError(
             str(error)
         ) from error
+    search_seconds = (
+        perf_counter() - search_started
+    )
     evidence_context, source_map = (
         build_evidence_context(
             search_results
         )
+    )
+    print(
+        "[PERF] RAG search: "
+        f"{search_seconds:.2f}s | "
+        f"results={len(search_results)} | "
+        f"evidence_chars={len(evidence_context)}",
+        flush=True,
     )
     if not source_map:
         return fallback_response(
@@ -150,6 +163,7 @@ def answer_document_question(
                 search_results
             ),
         )
+    model_started = perf_counter()
     try:
         model_output = generate_grounded_answer(
             question=normalized_question,
@@ -159,6 +173,18 @@ def answer_document_question(
         raise RagAnswerError(
             str(error)
         ) from error
+    model_seconds = (
+        perf_counter() - model_started
+    )
+    total_seconds = (
+        perf_counter() - request_started
+    )
+    print(
+        "[PERF] RAG model: "
+        f"{model_seconds:.2f}s | "
+        f"total={total_seconds:.2f}s",
+        flush=True,
+    )
     valid_source_ids = collect_valid_source_ids(
         model_output=model_output,
         source_map=source_map,

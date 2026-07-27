@@ -1,4 +1,4 @@
-﻿import httpx
+import httpx
 from pydantic import (
     BaseModel,
     Field,
@@ -42,6 +42,7 @@ Determine whether the evidence directly supports an answer.
 """.strip()
     payload = {
         "model": settings.ollama_chat_model,
+        "keep_alive": settings.ollama_keep_alive,
         "messages": [
             {
                 "role": "system",
@@ -66,6 +67,52 @@ Determine whether the evidence directly supports an answer.
             )
             response.raise_for_status()
             response_data = response.json()
+            total_seconds = (
+                float(
+                    response_data.get(
+                        "total_duration",
+                        0,
+                    )
+                )
+                / 1_000_000_000
+            )
+            load_seconds = (
+                float(
+                    response_data.get(
+                        "load_duration",
+                        0,
+                    )
+                )
+                / 1_000_000_000
+            )
+            prompt_seconds = (
+                float(
+                    response_data.get(
+                        "prompt_eval_duration",
+                        0,
+                    )
+                )
+                / 1_000_000_000
+            )
+            generation_seconds = (
+                float(
+                    response_data.get(
+                        "eval_duration",
+                        0,
+                    )
+                )
+                / 1_000_000_000
+            )
+            print(
+                "[PERF] Ollama chat: "
+                f"total={total_seconds:.2f}s | "
+                f"load={load_seconds:.2f}s | "
+                f"prompt={prompt_seconds:.2f}s | "
+                f"generation={generation_seconds:.2f}s | "
+                f"prompt_tokens={response_data.get('prompt_eval_count', 0)} | "
+                f"output_tokens={response_data.get('eval_count', 0)}",
+                flush=True,
+            )
     except httpx.HTTPError as error:
         raise ChatServiceError(
             "Could not connect to the local Ollama "
