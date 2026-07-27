@@ -474,4 +474,3 @@ def delete_document(
         "deleted": True,
         "file_deleted": file_deleted,
     }
-

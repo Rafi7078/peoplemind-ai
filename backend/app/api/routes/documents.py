@@ -420,4 +420,3 @@ def remove_document(
     return DocumentDeleteResult.model_validate(
         result
     )
-
