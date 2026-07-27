@@ -34,7 +34,8 @@ Rules:
 5. Answer in the same language as the user's question.
 6. If evidence is insufficient, set answerable to false.
 7. When answerable, mention source IDs such as [S1] naturally.
-8. Return only the requested structured JSON.
+8. Do not add a separate sources, references or supporting-sources line inside the answer.
+9. Return only the requested structured JSON.
 """.strip()
     user_message = f"""
 QUESTION:
@@ -167,7 +168,9 @@ Rules:
 7. Cite supporting source IDs naturally, such as [S1].
 8. If the evidence is insufficient, output exactly:
    NO_SUPPORTING_POLICY
-9. Return only the final answer text. Do not return JSON.
+9. Do not add a separate sources, references or supporting-sources line.
+10. Never append NO_SUPPORTING_POLICY after a supported answer.
+11. Return only the final answer text. Do not return JSON.
 """.strip()
     user_message = f"""
 QUESTION:
