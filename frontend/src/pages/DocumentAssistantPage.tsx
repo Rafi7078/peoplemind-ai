@@ -15,6 +15,8 @@ import {
   processDocument,
   streamDocumentQuestion,
   uploadDocument,
+  deleteDocument,
+  renameDocument,
 } from "../features/documents/api";
 import type {
   DocumentAnswerResponse,
@@ -163,6 +165,18 @@ export function DocumentAssistantPage() {
     activityMessage,
     setActivityMessage,
   ] = useState("");
+  const [
+    renameTarget,
+    setRenameTarget,
+  ] = useState<DocumentRead | null>(null);
+  const [
+    renameName,
+    setRenameName,
+  ] = useState("");
+  const [
+    deleteTarget,
+    setDeleteTarget,
+  ] = useState<DocumentRead | null>(null);
   const selectedDocument = useMemo(
     () =>
       documents.find(
@@ -375,6 +389,159 @@ export function DocumentAssistantPage() {
         getApiErrorMessage(
           error,
           "Document indexing failed.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleRename(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault();
+    if (!renameTarget) {
+      return;
+    }
+    const normalizedName =
+      renameName.trim();
+    if (!normalizedName) {
+      setErrorMessage(
+        "Enter a document name.",
+      );
+      return;
+    }
+    if (
+      normalizedName.includes("/") ||
+      normalizedName.includes("\\")
+    ) {
+      setErrorMessage(
+        "The document name cannot contain path characters.",
+      );
+      return;
+    }
+    if (
+      !normalizedName
+        .toLowerCase()
+        .endsWith(".pdf")
+    ) {
+      setErrorMessage(
+        "The document name must end with .pdf.",
+      );
+      return;
+    }
+    if (
+      normalizedName
+        .toLowerCase()
+        .endsWith(".pdf.pdf")
+    ) {
+      setErrorMessage(
+        "Remove the repeated .pdf extension.",
+      );
+      return;
+    }
+    if (
+      normalizedName ===
+      renameTarget.original_name
+    ) {
+      setRenameTarget(null);
+      setRenameName("");
+      return;
+    }
+    const targetId =
+      renameTarget.id;
+    setBusyAction(
+      `rename:${targetId}`,
+    );
+    setErrorMessage("");
+    setActivityMessage("");
+    try {
+      const renamedDocument =
+        await renameDocument(
+          targetId,
+          normalizedName,
+        );
+      updateDocument(
+        targetId,
+        {
+          original_name:
+            renamedDocument.original_name,
+        },
+      );
+      setAnswer(null);
+      setRenameTarget(null);
+      setRenameName("");
+      setActivityMessage(
+        `${renamedDocument.original_name} renamed successfully.`,
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Document rename failed.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleDeleteConfirmed():
+    Promise<void> {
+    if (!deleteTarget) {
+      return;
+    }
+    const targetDocument =
+      deleteTarget;
+    setBusyAction(
+      `delete:${targetDocument.id}`,
+    );
+    setErrorMessage("");
+    setActivityMessage("");
+    try {
+      const result =
+        await deleteDocument(
+          targetDocument.id,
+        );
+      const remainingDocuments =
+        documents.filter(
+          (document) =>
+            document.id !==
+            targetDocument.id,
+        );
+      setDocuments(
+        remainingDocuments,
+      );
+      setSelectedDocumentId(
+        (currentDocumentId) => {
+          if (
+            currentDocumentId ===
+            targetDocument.id
+          ) {
+            return (
+              remainingDocuments[0]?.id ??
+              null
+            );
+          }
+          return currentDocumentId;
+        },
+      );
+      setSearchScope("all");
+      setAnswer(null);
+      setStreamingText("");
+      setStreamStatus("");
+      setDeleteTarget(null);
+      setActivityMessage(
+        result.file_deleted
+          ? `${targetDocument.original_name} and all indexed data were deleted.`
+          : (
+              `${targetDocument.original_name} was removed, ` +
+              "but the stored file could not be deleted."
+            ),
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Document deletion failed.",
         ),
       );
     } finally {
@@ -795,6 +962,43 @@ export function DocumentAssistantPage() {
                       : "2. Create vector index"}
                   </button>
                 </div>
+                <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-200 pt-4">
+                  <button
+                    className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      busyAction !== null
+                    }
+                    onClick={() => {
+                      setRenameTarget(
+                        selectedDocument,
+                      );
+                      setRenameName(
+                        selectedDocument.original_name,
+                      );
+                      setErrorMessage("");
+                      setActivityMessage("");
+                    }}
+                    type="button"
+                  >
+                    Rename document
+                  </button>
+                  <button
+                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      busyAction !== null
+                    }
+                    onClick={() => {
+                      setDeleteTarget(
+                        selectedDocument,
+                      );
+                      setErrorMessage("");
+                      setActivityMessage("");
+                    }}
+                    type="button"
+                  >
+                    Delete document
+                  </button>
+                </div>
                 <p className="mt-4 text-xs leading-5 text-slate-500">
                   Workflow: upload → process →
                   index → ask. Already completed
@@ -922,7 +1126,7 @@ export function DocumentAssistantPage() {
                             aria-hidden="true"
                             className="ml-1 inline-block animate-pulse font-bold text-sky-600"
                           >
-                            ?
+                            |
                           </span>
                         </p>
                       ) : (
@@ -1020,7 +1224,7 @@ export function DocumentAssistantPage() {
                                         </h4>
                                         <p className="mt-1 text-sm leading-6 text-slate-500">
                                           {metadata.documentDate
-                                            ? `Document date: ${metadata.documentDate} ? `
+                                            ? `Document date: ${metadata.documentDate} | `
                                             : ""}
                                           Referenced on page{" "}
                                           {
@@ -1063,6 +1267,139 @@ export function DocumentAssistantPage() {
           )}
         </div>
       </section>
+      {renameTarget ? (
+        <div
+          aria-labelledby="rename-document-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+        >
+          <form
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            onSubmit={handleRename}
+          >
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-sky-700">
+              Document management
+            </p>
+            <h2
+              className="mt-2 text-2xl font-bold text-slate-950"
+              id="rename-document-title"
+            >
+              Rename document
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              The displayed policy name and citation
+              metadata will be updated. The secured
+              stored PDF will remain unchanged.
+            </p>
+            <label
+              className="mt-5 block text-sm font-semibold text-slate-700"
+              htmlFor="document-rename"
+            >
+              PDF name
+            </label>
+            <input
+              autoFocus
+              className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+              id="document-rename"
+              maxLength={255}
+              onChange={(event) => {
+                setRenameName(
+                  event.target.value,
+                );
+              }}
+              required
+              type="text"
+              value={renameName}
+            />
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                disabled={
+                  busyAction !== null
+                }
+                onClick={() => {
+                  setRenameTarget(null);
+                  setRenameName("");
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-sky-600 px-5 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  busyAction !== null
+                }
+                type="submit"
+              >
+                {busyAction ===
+                `rename:${renameTarget.id}`
+                  ? "Renaming..."
+                  : "Save new name"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div
+          aria-labelledby="delete-document-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+        >
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-xl font-bold text-red-700">
+              !
+            </div>
+            <h2
+              className="mt-4 text-2xl font-bold text-slate-950"
+              id="delete-document-title"
+            >
+              Delete this document?
+            </h2>
+            <p className="mt-3 break-words text-sm font-semibold text-slate-800">
+              {deleteTarget.original_name}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              This permanently removes the uploaded PDF,
+              extracted pages, searchable chunks and
+              ChromaDB vectors. This action cannot be
+              undone.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                disabled={
+                  busyAction !== null
+                }
+                onClick={() => {
+                  setDeleteTarget(null);
+                }}
+                type="button"
+              >
+                Keep document
+              </button>
+              <button
+                className="rounded-xl bg-red-600 px-5 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  busyAction !== null
+                }
+                onClick={() => {
+                  void handleDeleteConfirmed();
+                }}
+                type="button"
+              >
+                {busyAction ===
+                `delete:${deleteTarget.id}`
+                  ? "Deleting..."
+                  : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

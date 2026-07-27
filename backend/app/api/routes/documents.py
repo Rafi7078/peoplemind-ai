@@ -18,11 +18,13 @@ from backend.app.api.dependencies import (
 from backend.app.schemas.document import (
     DocumentAnswerResponse,
     DocumentAskRequest,
+    DocumentDeleteResult,
     DocumentChunkPreview,
     DocumentIndexResult,
     DocumentPagePreview,
     DocumentProcessResult,
     DocumentRead,
+    DocumentRenameRequest,
     DocumentSearchRequest,
     DocumentSearchResult,
 )
@@ -39,10 +41,15 @@ from backend.app.services.document_index_service import (
 )
 from backend.app.services.document_service import (
     DocumentFileNotFoundError,
+    DocumentManagementError,
+    DocumentNameConflictError,
     DocumentValidationError,
     DuplicateDocumentError,
+    ManagedDocumentNotFoundError,
+    delete_document,
     get_document_file,
     list_documents,
+    rename_document,
     store_pdf_document,
 )
 from backend.app.services.pdf_extraction_service import (
@@ -334,3 +341,83 @@ def read_document_chunks(
         )
         for chunk in chunks
     ]
+
+@router.patch(
+    "/{document_id}",
+    response_model=DocumentRead,
+    summary="Rename an uploaded HR document",
+    responses={
+        404: {
+            "description": "Document not found"
+        },
+        409: {
+            "description": (
+                "Another document already uses the name"
+            )
+        },
+    },
+)
+def update_document_name(
+    document_id: int,
+    request: DocumentRenameRequest,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> DocumentRead:
+    try:
+        document = rename_document(
+            database=database,
+            document_id=document_id,
+            original_name=request.original_name,
+        )
+    except ManagedDocumentNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    except DocumentNameConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    except DocumentManagementError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    return DocumentRead.model_validate(
+        document
+    )
+@router.delete(
+    "/{document_id}",
+    response_model=DocumentDeleteResult,
+    summary="Delete a document and its indexed data",
+    responses={
+        404: {
+            "description": "Document not found"
+        },
+    },
+)
+def remove_document(
+    document_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> DocumentDeleteResult:
+    try:
+        result = delete_document(
+            database=database,
+            document_id=document_id,
+        )
+    except ManagedDocumentNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+    except DocumentManagementError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    return DocumentDeleteResult.model_validate(
+        result
+    )
+

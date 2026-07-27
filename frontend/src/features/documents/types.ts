@@ -8,6 +8,13 @@ export type DocumentRead = {
   uploaded_by_id: number;
   created_at: string;
 };
+
+export type DocumentDeleteResult = {
+  document_id: number;
+  deleted: boolean;
+  file_deleted: boolean;
+};
+
 export type DocumentProcessResult = {
   document_id: number;
   status: string;

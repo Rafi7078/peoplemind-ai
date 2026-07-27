@@ -4,6 +4,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
 )
 class DocumentRead(BaseModel):
     id: int
@@ -15,6 +16,41 @@ class DocumentRead(BaseModel):
     uploaded_by_id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+class DocumentRenameRequest(BaseModel):
+    original_name: str = Field(
+        min_length=5,
+        max_length=255,
+    )
+    @field_validator("original_name")
+    @classmethod
+    def validate_original_name(
+        cls,
+        value: str,
+    ) -> str:
+        normalized_name = value.strip()
+        if (
+            "/" in normalized_name
+            or "\\" in normalized_name
+            or "\x00" in normalized_name
+        ):
+            raise ValueError(
+                "The document name cannot contain path characters."
+            )
+        if not normalized_name.lower().endswith(".pdf"):
+            raise ValueError(
+                "The document name must end with .pdf."
+            )
+        if normalized_name.lower().endswith(
+            ".pdf.pdf"
+        ):
+            raise ValueError(
+                "The document name cannot contain a repeated PDF extension."
+            )
+        return normalized_name
+class DocumentDeleteResult(BaseModel):
+    document_id: int
+    deleted: bool
+    file_deleted: bool
 class DocumentProcessResult(BaseModel):
     document_id: int
     status: str

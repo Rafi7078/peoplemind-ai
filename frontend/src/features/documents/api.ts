@@ -7,6 +7,7 @@ import type {
   DocumentAnswerResponse,
   DocumentAskRequest,
   DocumentChunkPreview,
+  DocumentDeleteResult,
   DocumentIndexResult,
   DocumentPagePreview,
   DocumentProcessResult,
@@ -21,6 +22,29 @@ export async function listDocuments(): Promise<
   const response =
     await apiClient.get<DocumentRead[]>(
       "/api/documents",
+    );
+  return response.data;
+}
+
+export async function renameDocument(
+  documentId: number,
+  originalName: string,
+): Promise<DocumentRead> {
+  const response =
+    await apiClient.patch<DocumentRead>(
+      `/api/documents/${documentId}`,
+      {
+        original_name: originalName,
+      },
+    );
+  return response.data;
+}
+export async function deleteDocument(
+  documentId: number,
+): Promise<DocumentDeleteResult> {
+  const response =
+    await apiClient.delete<DocumentDeleteResult>(
+      `/api/documents/${documentId}`,
     );
   return response.data;
 }
