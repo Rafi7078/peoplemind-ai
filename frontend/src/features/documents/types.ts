@@ -73,3 +73,26 @@ export type DocumentAnswerResponse = {
   retrieved_chunks: number;
   model: string;
 };
+
+export type DocumentStreamStatusEvent = {
+  event: "status";
+  stage: "searching" | "generating";
+  message: string;
+};
+export type DocumentStreamDeltaEvent = {
+  event: "delta";
+  text: string;
+};
+export type DocumentStreamFinalEvent = {
+  event: "final";
+  data: DocumentAnswerResponse;
+};
+export type DocumentStreamErrorEvent = {
+  event: "error";
+  message: string;
+};
+export type DocumentStreamEvent =
+  | DocumentStreamStatusEvent
+  | DocumentStreamDeltaEvent
+  | DocumentStreamFinalEvent
+  | DocumentStreamErrorEvent;

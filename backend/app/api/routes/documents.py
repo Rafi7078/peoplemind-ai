@@ -1,6 +1,9 @@
 from typing import Annotated
 from urllib.parse import quote
-from fastapi.responses import FileResponse
+from fastapi.responses import (
+    FileResponse,
+    StreamingResponse,
+)
 from fastapi import (
     APIRouter,
     File,
@@ -23,7 +26,10 @@ from backend.app.schemas.document import (
     DocumentSearchRequest,
     DocumentSearchResult,
 )
-from backend.app.services import rag_answer_service
+from backend.app.services import (
+    rag_answer_service,
+    rag_stream_service,
+)
 from backend.app.services.document_index_service import (
     DocumentIndexingError,
     DocumentSearchError,
@@ -150,6 +156,30 @@ def ask_documents(
         ) from error
     return DocumentAnswerResponse.model_validate(result)
 
+
+@router.post(
+    "/ask/stream",
+    response_class=StreamingResponse,
+    summary="Stream an evidence-grounded policy answer",
+)
+def stream_ask_documents(
+    request: DocumentAskRequest,
+    current_user: CurrentUserDependency,
+) -> StreamingResponse:
+    return StreamingResponse(
+        rag_stream_service.stream_document_answer(
+            question=request.question,
+            document_id=request.document_id,
+            top_k=request.top_k,
+        ),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": (
+                "no-cache, no-store, max-age=0"
+            ),
+            "X-Accel-Buffering": "no",
+        },
+    )
 @router.get(
     "/{document_id}/file",
     response_class=FileResponse,

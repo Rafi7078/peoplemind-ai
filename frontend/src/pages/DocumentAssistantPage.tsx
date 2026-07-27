@@ -13,6 +13,7 @@ import {
   indexDocument,
   listDocuments,
   processDocument,
+  streamDocumentQuestion,
   uploadDocument,
 } from "../features/documents/api";
 import type {
@@ -148,6 +149,10 @@ export function DocumentAssistantPage() {
     useState<DocumentAnswerResponse | null>(
       null,
     );
+  const [streamingText, setStreamingText] =
+    useState("");
+  const [streamStatus, setStreamStatus] =
+    useState("");
   const [isLoading, setIsLoading] =
     useState(true);
   const [busyAction, setBusyAction] =
@@ -388,30 +393,108 @@ export function DocumentAssistantPage() {
       );
       return;
     }
+    const request = {
+      question: normalizedQuestion,
+      document_id:
+        searchScope === "selected" &&
+        selectedDocument?.status ===
+          "indexed"
+          ? selectedDocument.id
+          : null,
+      top_k: 5,
+    };
+    let receivedTextDelta = false;
+    let receivedFinalEvent = false;
     setBusyAction("ask");
     setErrorMessage("");
     setActivityMessage("");
     setAnswer(null);
+    setStreamingText("");
+    setStreamStatus(
+      "Preparing your request...",
+    );
     try {
-      const result =
-        await askDocumentQuestion({
-          question: normalizedQuestion,
-          document_id:
-            searchScope === "selected" &&
-            selectedDocument?.status ===
-              "indexed"
-              ? selectedDocument.id
-              : null,
-          top_k: 5,
-        });
-      setAnswer(result);
-    } catch (error) {
-      setErrorMessage(
-        getApiErrorMessage(
-          error,
-          "Question answering failed.",
-        ),
+      await streamDocumentQuestion(
+        request,
+        (streamEvent) => {
+          switch (streamEvent.event) {
+            case "status":
+              setStreamStatus(
+                streamEvent.message,
+              );
+              break;
+            case "delta":
+              receivedTextDelta = true;
+              setStreamStatus(
+                "Generating policy guidance...",
+              );
+              setStreamingText(
+                (currentText) =>
+                  currentText +
+                  streamEvent.text,
+              );
+              break;
+            case "final":
+              receivedFinalEvent = true;
+              setAnswer(
+                streamEvent.data,
+              );
+              setStreamingText("");
+              setStreamStatus("");
+              break;
+            case "error":
+              throw new Error(
+                streamEvent.message,
+              );
+          }
+        },
       );
+      if (!receivedFinalEvent) {
+        throw new Error(
+          "The streaming response ended before completion.",
+        );
+      }
+    } catch (streamError) {
+      /*
+       * A standard response is safe when no
+       * answer text has appeared yet. Once live
+       * text has started, repeating the complete
+       * model request would waste time and CPU.
+       */
+      if (!receivedTextDelta) {
+        setStreamingText("");
+        setStreamStatus(
+          "Completing with the standard response...",
+        );
+        try {
+          const fallbackResult =
+            await askDocumentQuestion(
+              request,
+            );
+          setAnswer(fallbackResult);
+          setStreamStatus("");
+        } catch (fallbackError) {
+          setStreamStatus("");
+          setErrorMessage(
+            getApiErrorMessage(
+              fallbackError,
+              "Question answering failed.",
+            ),
+          );
+        }
+      } else {
+        setStreamingText("");
+        setStreamStatus("");
+        setErrorMessage(
+          streamError instanceof Error &&
+          streamError.message
+            ? streamError.message
+            : (
+                "The live response was interrupted. " +
+                "Please try again."
+              ),
+        );
+      }
     } finally {
       setBusyAction(null);
     }
@@ -812,6 +895,47 @@ export function DocumentAssistantPage() {
                   </div>
                 </form>
               </section>
+              {busyAction === "ask" &&
+              !answer ? (
+                <section className="rounded-3xl border border-sky-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    <div
+                      aria-hidden="true"
+                      className="mt-1 h-9 w-9 shrink-0 animate-spin rounded-full border-4 border-sky-100 border-t-sky-600"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold uppercase tracking-[0.18em] text-sky-700">
+                        {streamingText
+                          ? "Policy Guidance"
+                          : "PeopleMind AI"}
+                      </p>
+                      <h2 className="mt-2 text-lg font-bold text-slate-950">
+                        {streamStatus ||
+                          "Preparing response..."}
+                      </h2>
+                      {streamingText ? (
+                        <p className="mt-5 whitespace-pre-wrap text-base leading-8 text-slate-800">
+                          {formatPolicyAnswer(
+                            streamingText,
+                          )}
+                          <span
+                            aria-hidden="true"
+                            className="ml-1 inline-block animate-pulse font-bold text-sky-600"
+                          >
+                            ?
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-sm leading-6 text-slate-500">
+                          Relevant company policies are
+                          being reviewed. The answer will
+                          appear here as it is generated.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
               {answer ? (
                 <>
                   {answer.response_type ===
@@ -920,7 +1044,7 @@ export function DocumentAssistantPage() {
                                           {busyAction ===
                                           actionKey
                                             ? "Opening policy..."
-                                            : "View referenced policy ?"}
+                                            : "View referenced policy"}
                                         </button>
                                       </div>
                                     </div>

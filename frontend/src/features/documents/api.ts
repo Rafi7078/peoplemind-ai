@@ -1,4 +1,8 @@
 import { apiClient } from "../../api/client";
+import {
+  AUTH_EXPIRED_EVENT,
+  tokenSession,
+} from "../../auth/session";
 import type {
   DocumentAnswerResponse,
   DocumentAskRequest,
@@ -9,6 +13,7 @@ import type {
   DocumentRead,
   DocumentSearchRequest,
   DocumentSearchResult,
+  DocumentStreamEvent,
 } from "./types";
 export async function listDocuments(): Promise<
   DocumentRead[]
@@ -113,4 +118,124 @@ export async function fetchDocumentFile(
     },
   );
   return response.data;
+}
+
+function parseStreamEvent(
+  line: string,
+): DocumentStreamEvent {
+  const parsed: unknown = JSON.parse(line);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("event" in parsed)
+  ) {
+    throw new Error(
+      "The streaming response contained an invalid event.",
+    );
+  }
+  return parsed as DocumentStreamEvent;
+}
+export async function streamDocumentQuestion(
+  request: DocumentAskRequest,
+  onEvent: (
+    event: DocumentStreamEvent,
+  ) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const baseUrl = String(
+    apiClient.defaults.baseURL ?? "",
+  ).replace(/\/$/, "");
+  const token = tokenSession.get();
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Accept: "application/x-ndjson",
+  });
+  if (token) {
+    headers.set(
+      "Authorization",
+      `Bearer ${token}`,
+    );
+  }
+  const response = await fetch(
+    `${baseUrl}/api/documents/ask/stream`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+      signal,
+    },
+  );
+  if (response.status === 401) {
+    tokenSession.clear();
+    window.dispatchEvent(
+      new Event(AUTH_EXPIRED_EVENT),
+    );
+  }
+  if (!response.ok) {
+    let message =
+      "The streaming request failed.";
+    try {
+      const errorBody = (
+        await response.json()
+      ) as {
+        detail?: unknown;
+      };
+      if (
+        typeof errorBody.detail ===
+        "string"
+      ) {
+        message = errorBody.detail;
+      }
+    } catch {
+      // Preserve the safe fallback message.
+    }
+    throw new Error(message);
+  }
+  if (!response.body) {
+    throw new Error(
+      "The browser did not receive a streaming response body.",
+    );
+  }
+  const reader =
+    response.body.getReader();
+  const decoder = new TextDecoder(
+    "utf-8",
+  );
+  let buffer = "";
+  while (true) {
+    const {
+      value,
+      done,
+    } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(
+      value,
+      {
+        stream: true,
+      },
+    );
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const normalizedLine =
+        line.trim();
+      if (!normalizedLine) {
+        continue;
+      }
+      onEvent(
+        parseStreamEvent(
+          normalizedLine,
+        ),
+      );
+    }
+  }
+  buffer += decoder.decode();
+  const finalLine = buffer.trim();
+  if (finalLine) {
+    onEvent(
+      parseStreamEvent(finalLine),
+    );
+  }
 }
