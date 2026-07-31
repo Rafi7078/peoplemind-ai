@@ -27,6 +27,12 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
     )
+    candidate_upload_dir: str = "data/candidate_cvs"
+    max_candidate_size_mb: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+    )
     vector_store_dir: str = "data/vector_store"
     vector_collection_name: str = "peoplemind_hr_documents"
     chunk_size: int = Field(

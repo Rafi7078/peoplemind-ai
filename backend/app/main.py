@@ -3,11 +3,26 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.routes.auth import router as auth_router
+from backend.app.api.routes.candidates import (
+    router as candidates_router,
+)
+from backend.app.api.routes.jobs import (
+    router as jobs_router,
+)
 from backend.app.api.routes.documents import (
     router as documents_router,
 )
 from backend.app.core.config import settings
 from backend.app.db.database import Base, engine
+from backend.app.models.candidate_cv import (  # noqa: F401
+    CandidateCV,
+)
+from backend.app.models.candidate_cv_page import (  # noqa: F401
+    CandidateCVPage,
+)
+from backend.app.models.job_profile import (  # noqa: F401
+    JobProfile,
+)
 from backend.app.models.document import Document  # noqa: F401
 from backend.app.models.document_chunk import (  # noqa: F401
     DocumentChunk,
@@ -28,7 +43,7 @@ app = FastAPI(
         "Backend API for the PeopleMind AI HR Intelligence "
         "and Management Assistant."
     ),
-    version="0.6.0",
+    version="0.7.0",
     debug=settings.app_debug,
     lifespan=lifespan,
 )
@@ -49,6 +64,8 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(documents_router)
+app.include_router(jobs_router)
+app.include_router(candidates_router)
 @app.get("/")
 def root() -> dict[str, str]:
     return {
@@ -60,5 +77,5 @@ def health_check() -> dict[str, str]:
     return {
         "service": "PeopleMind AI API",
         "status": "healthy",
-        "version": "0.6.0",
+        "version": "0.7.0",
     }
