@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
 } from "react";
 import { Link } from "react-router-dom";
@@ -13,13 +13,13 @@ const modules = [
     href: "/documents",
   },
   {
-    title: "CV Screening",
+    title: "CV Intelligence",
     description:
-      "Compare candidates against job requirements with human review.",
-    status: "Planned",
+      "Create job profiles, process candidate CVs and prepare evidence for ATS and job-match analysis.",
+    status: "Available",
     statusClass:
-      "bg-amber-100 text-amber-700",
-    href: null,
+      "bg-emerald-100 text-emerald-700",
+    href: "/cv-intelligence",
   },
   {
     title: "Attendance Management",

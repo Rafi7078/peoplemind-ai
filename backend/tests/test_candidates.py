@@ -219,3 +219,40 @@ def test_missing_candidate_processing_returns_404():
             headers=headers,
         )
     assert response.status_code == 404
+
+def test_candidate_file_requires_authentication():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/candidates/1/file"
+        )
+    assert response.status_code == 401
+def test_admin_can_open_original_candidate_cv_inline():
+    headers = create_admin_headers()
+    with TestClient(app) as client:
+        upload_response = upload_candidate(
+            client,
+            headers,
+        )
+        candidate_id = (
+            upload_response.json()["id"]
+        )
+        file_response = client.get(
+            (
+                f"/api/candidates/"
+                f"{candidate_id}/file"
+            ),
+            headers=headers,
+        )
+    assert file_response.status_code == 200
+    assert (
+        file_response.headers[
+            "content-type"
+        ]
+        == "application/pdf"
+    )
+    assert file_response.headers[
+        "content-disposition"
+    ].startswith("inline;")
+    assert file_response.content.startswith(
+        b"%PDF-"
+    )

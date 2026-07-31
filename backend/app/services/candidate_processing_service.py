@@ -1,4 +1,6 @@
 
+import re
+from typing import Any
 from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -14,13 +16,53 @@ from backend.app.services.candidate_service import (
     CandidateCVNotFoundError,
     get_candidate_cv,
 )
-from backend.app.services.pdf_extraction_service import (
-    clean_extracted_text,
-)
 class CandidateCVProcessingError(
     ValueError
 ):
     pass
+def extract_candidate_page_text(
+    page: Any,
+) -> str:
+    try:
+        return (
+            page.extract_text(
+                extraction_mode="layout",
+                layout_mode_space_vertically=False,
+            )
+            or ""
+        )
+    except KeyError as error:
+        if error.args != ("/Contents",):
+            raise
+        return page.extract_text() or ""
+def clean_candidate_extracted_text(
+    text: str,
+) -> str:
+    cleaned_text = (
+        text
+        .replace("\x00", "")
+        .replace("\ufeff", "")
+        .replace("\ufffe", "-")
+        .replace("\u00ad", "-")
+    )
+    cleaned_text = re.sub(
+        r"-[ \t]*\n[ \t]*(?=\w)",
+        "-",
+        cleaned_text,
+    )
+    lines = [
+        line.rstrip()
+        for line in cleaned_text.splitlines()
+    ]
+    normalized_text = "\n".join(
+        lines
+    )
+    normalized_text = re.sub(
+        r"\n{4,}",
+        "\n\n\n",
+        normalized_text,
+    )
+    return normalized_text.strip()
 def mark_candidate_failed(
     database: Session,
     candidate_id: int,
@@ -77,10 +119,12 @@ def process_candidate_cv(
             start=1,
         ):
             extracted_text = (
-                page.extract_text() or ""
+                extract_candidate_page_text(
+                    page
+                )
             )
             cleaned_text = (
-                clean_extracted_text(
+                clean_candidate_extracted_text(
                     extracted_text
                 )
             )

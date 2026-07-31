@@ -29,4 +29,4 @@ class CandidateCVPagePreview(
 ):
     page_number: int
     char_count: int
-    text_preview: str
+    text: str

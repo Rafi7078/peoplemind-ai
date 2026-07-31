@@ -37,6 +37,10 @@ class CandidateCVNotFoundError(
     LookupError
 ):
     pass
+class CandidateCVFileNotFoundError(
+    FileNotFoundError
+):
+    pass
 def get_candidate_cv(
     database: Session,
     candidate_id: int,
@@ -220,3 +224,36 @@ async def store_candidate_cv(
         if temporary_path.exists():
             temporary_path.unlink()
         await upload.close()
+
+def get_candidate_cv_file(
+    database: Session,
+    candidate_id: int,
+) -> tuple[CandidateCV, Path]:
+    candidate = get_candidate_cv(
+        database=database,
+        candidate_id=candidate_id,
+    )
+    upload_directory = Path(
+        settings.candidate_upload_dir
+    ).resolve()
+    candidate_path = Path(
+        candidate.file_path
+    ).resolve()
+    try:
+        candidate_path.relative_to(
+            upload_directory
+        )
+    except ValueError as error:
+        raise CandidateCVFileNotFoundError(
+            "The candidate CV file path "
+            "is outside the secure upload directory."
+        ) from error
+    if (
+        not candidate_path.exists()
+        or not candidate_path.is_file()
+    ):
+        raise CandidateCVFileNotFoundError(
+            "The stored candidate CV file "
+            "could not be found."
+        )
+    return candidate, candidate_path

@@ -1,5 +1,7 @@
+from urllib.parse import quote
 
 from typing import Annotated
+from fastapi.responses import FileResponse
 from fastapi import (
     APIRouter,
     File,
@@ -22,9 +24,11 @@ from backend.app.services.candidate_processing_service import (
     process_candidate_cv,
 )
 from backend.app.services.candidate_service import (
+    CandidateCVFileNotFoundError,
     CandidateCVNotFoundError,
     CandidateValidationError,
     DuplicateCandidateCVError,
+    get_candidate_cv_file,
     list_candidate_cvs,
     store_candidate_cv,
 )
@@ -98,6 +102,56 @@ def read_candidate_cvs(
             database
         )
     ]
+@router.get(
+    "/{candidate_id}/file",
+    response_class=FileResponse,
+    summary="Open the original candidate CV securely",
+    responses={
+        404: {
+            "description": (
+                "Candidate or stored PDF file not found"
+            )
+        },
+    },
+)
+def read_candidate_cv_file(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> FileResponse:
+    try:
+        candidate, candidate_path = (
+            get_candidate_cv_file(
+                database=database,
+                candidate_id=candidate_id,
+            )
+        )
+    except (
+        CandidateCVNotFoundError,
+        CandidateCVFileNotFoundError,
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    encoded_filename = quote(
+        candidate.original_name
+    )
+    return FileResponse(
+        path=candidate_path,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                "inline; "
+                f"filename*=UTF-8''{encoded_filename}"
+            ),
+            "Cache-Control": (
+                "private, no-store, max-age=0"
+            ),
+        },
+    )
 @router.post(
     "/{candidate_id}/process",
     response_model=CandidateCVProcessResult,
@@ -159,7 +213,7 @@ def read_candidate_pages(
         CandidateCVPagePreview(
             page_number=page.page_number,
             char_count=page.char_count,
-            text_preview=page.text[:500],
+            text=page.text,
         )
         for page in pages
     ]

@@ -1,4 +1,4 @@
-﻿import {
+import {
   Navigate,
   Route,
   Routes,
@@ -6,6 +6,7 @@
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
+import { CVIntelligencePage } from "./pages/CVIntelligencePage";
 import { DocumentAssistantPage } from "./pages/DocumentAssistantPage";
 import { LoginPage } from "./pages/LoginPage";
 function App() {
@@ -26,6 +27,12 @@ function App() {
               <DocumentAssistantPage />
             }
             path="documents"
+          />
+          <Route
+            element={
+              <CVIntelligencePage />
+            }
+            path="cv-intelligence"
           />
         </Route>
       </Route>
