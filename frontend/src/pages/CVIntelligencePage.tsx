@@ -9,8 +9,13 @@ import type {
   FormEvent,
 } from "react";
 import {
+  CandidateProfilePanel,
+} from "../features/cv-intelligence/CandidateProfilePanel";
+import {
   createJobProfile,
+  extractCandidateProfile,
   fetchCandidateCVFile,
+  getCandidateProfile,
   listCandidateCVPages,
   listCandidateCVs,
   listJobProfiles,
@@ -20,6 +25,7 @@ import {
 import type {
   CandidateCV,
   CandidateCVPagePreview,
+  CandidateProfile,
   JobProfile,
   JobProfileCreate,
 } from "../features/cv-intelligence/types";
@@ -201,6 +207,16 @@ export function CVIntelligencePage() {
     CandidateCVPagePreview[]
   >([]);
   const [
+    candidateProfile,
+    setCandidateProfile,
+  ] = useState<
+    CandidateProfile | null
+  >(null);
+  const [
+    isProfileLoading,
+    setIsProfileLoading,
+  ] = useState(false);
+  const [
     isLoading,
     setIsLoading,
   ] = useState(true);
@@ -290,7 +306,9 @@ export function CVIntelligencePage() {
             candidateResult.length > 0
           ) {
             setCandidatePages([]);
+            setCandidateProfile(null);
             setIsPageLoading(true);
+            setIsProfileLoading(true);
             setSelectedCandidateId(
               candidateResult[0].id,
             );
@@ -352,6 +370,55 @@ export function CVIntelligencePage() {
       .finally(() => {
         if (isActive) {
           setIsPageLoading(
+            false,
+          );
+        }
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [selectedCandidateId]);
+  useEffect(() => {
+    if (
+      selectedCandidateId === null
+    ) {
+      return;
+    }
+    let isActive = true;
+    getCandidateProfile(
+      selectedCandidateId,
+    )
+      .then((result) => {
+        if (isActive) {
+          setCandidateProfile(
+            result,
+          );
+        }
+      })
+      .catch(
+        (error: unknown) => {
+          if (!isActive) {
+            return;
+          }
+          if (
+            axios.isAxiosError(error)
+            && error.response?.status
+            === 404
+          ) {
+            setCandidateProfile(null);
+            return;
+          }
+          setErrorMessage(
+            getApiErrorMessage(
+              error,
+              "Could not load the structured candidate profile.",
+            ),
+          );
+        },
+      )
+      .finally(() => {
+        if (isActive) {
+          setIsProfileLoading(
             false,
           );
         }
@@ -479,7 +546,9 @@ export function CVIntelligencePage() {
         ],
       );
       setCandidatePages([]);
+      setCandidateProfile(null);
       setIsPageLoading(true);
+      setIsProfileLoading(true);
       setSelectedCandidateId(
         uploadedCandidate.id,
       );
@@ -557,6 +626,49 @@ export function CVIntelligencePage() {
       setBusyAction(null);
     }
   }
+  async function handleExtractCandidateProfile(
+    candidate: CandidateCV,
+  ): Promise<void> {
+    clearMessages();
+    if (
+      candidate.status !== "ready"
+    ) {
+      setErrorMessage(
+        "Process this CV successfully before extracting its structured profile.",
+      );
+      return;
+    }
+    setBusyAction(
+      `profile-${candidate.id}`,
+    );
+    setIsProfileLoading(true);
+    try {
+      const profile =
+        await extractCandidateProfile(
+          candidate.id,
+        );
+      setCandidateProfile(
+        profile,
+      );
+      setSelectedCandidateId(
+        candidate.id,
+      );
+      setActivityMessage(
+        "Structured candidate profile extracted successfully. " +
+        "Verify the result against the original CV.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not extract the structured candidate profile.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+      setIsProfileLoading(false);
+    }
+  }
   async function handleProcessCandidate(
     candidate: CandidateCV,
   ): Promise<void> {
@@ -607,6 +719,8 @@ export function CVIntelligencePage() {
       setCandidatePages(
         pages,
       );
+      setCandidateProfile(null);
+      setIsProfileLoading(false);
       if (
         result.status === "needs_ocr"
       ) {
@@ -1185,7 +1299,9 @@ export function CVIntelligencePage() {
                           }
                           onClick={() => {
                             setCandidatePages([]);
+                            setCandidateProfile(null);
                             setIsPageLoading(true);
+                            setIsProfileLoading(true);
                             setSelectedCandidateId(
                               candidate.id,
                             );
@@ -1317,7 +1433,36 @@ export function CVIntelligencePage() {
                           ? "Process again"
                           : "Process CV"}
                     </button>
+                    <button
+                      className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={
+                        busyAction !== null
+                        || selectedCandidate.status
+                        !== "ready"
+                      }
+                      onClick={() => {
+                        void handleExtractCandidateProfile(
+                          selectedCandidate,
+                        );
+                      }}
+                      type="button"
+                    >
+                      {busyAction
+                      === `profile-${selectedCandidate.id}`
+                        ? "Extracting profile..."
+                        : candidateProfile
+                          ? "Re-extract structured profile"
+                          : "Extract structured profile"}
+                    </button>
                   </div>
+                  <CandidateProfilePanel
+                    isLoading={
+                      isProfileLoading
+                    }
+                    profile={
+                      candidateProfile
+                    }
+                  />
                   <details className="mt-7 border-t border-slate-200 pt-6">
                     <summary className="cursor-pointer rounded-xl bg-slate-100 px-4 py-3 font-semibold text-slate-800 transition hover:bg-slate-200">
                       Show extraction audit (raw text)

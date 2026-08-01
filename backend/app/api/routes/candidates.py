@@ -18,6 +18,9 @@ from backend.app.schemas.candidate import (
     CandidateCVProcessResult,
     CandidateCVRead,
 )
+from backend.app.schemas.candidate_profile import (
+    CandidateProfileRead,
+)
 from backend.app.services.candidate_processing_service import (
     CandidateCVProcessingError,
     list_candidate_cv_pages,
@@ -31,6 +34,9 @@ from backend.app.services.candidate_service import (
     get_candidate_cv_file,
     list_candidate_cvs,
     store_candidate_cv,
+)
+from backend.app.services import (
+    candidate_profile_service,
 )
 router = APIRouter(
     prefix="/api/candidates",
@@ -217,3 +223,90 @@ def read_candidate_pages(
         )
         for page in pages
     ]
+
+@router.post(
+    "/{candidate_id}/profile/extract",
+    response_model=CandidateProfileRead,
+    summary="Extract a structured candidate profile",
+)
+def extract_structured_candidate_profile(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> CandidateProfileRead:
+    try:
+        profile = (
+            candidate_profile_service
+            .extract_candidate_profile(
+                database=database,
+                candidate_id=candidate_id,
+            )
+        )
+    except CandidateCVNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    except (
+        candidate_profile_service
+        .CandidateProfilePrerequisiteError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error
+    except (
+        candidate_profile_service
+        .CandidateProfileExtractionError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_502_BAD_GATEWAY
+            ),
+            detail=str(error),
+        ) from error
+    return CandidateProfileRead.model_validate(
+        profile
+    )
+@router.get(
+    "/{candidate_id}/profile",
+    response_model=CandidateProfileRead,
+    summary="Read a structured candidate profile",
+)
+def read_structured_candidate_profile(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> CandidateProfileRead:
+    try:
+        profile = (
+            candidate_profile_service
+            .get_candidate_profile(
+                database=database,
+                candidate_id=candidate_id,
+            )
+        )
+    except CandidateCVNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    except (
+        candidate_profile_service
+        .CandidateProfileNotFoundError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    return CandidateProfileRead.model_validate(
+        profile
+    )

@@ -4,6 +4,7 @@ import type {
   CandidateCV,
   CandidateCVPagePreview,
   CandidateCVProcessResult,
+  CandidateProfile,
   JobProfile,
   JobProfileCreate,
 } from "./types";
@@ -78,6 +79,29 @@ export async function listCandidateCVPages(
   const response =
     await apiClient.get<CandidateCVPagePreview[]>(
       `/api/candidates/${candidateId}/pages`,
+    );
+  return response.data;
+}
+
+export async function extractCandidateProfile(
+  candidateId: number,
+): Promise<CandidateProfile> {
+  const response =
+    await apiClient.post<CandidateProfile>(
+      `/api/candidates/${candidateId}/profile/extract`,
+      undefined,
+      {
+        timeout: 600_000,
+      },
+    );
+  return response.data;
+}
+export async function getCandidateProfile(
+  candidateId: number,
+): Promise<CandidateProfile> {
+  const response =
+    await apiClient.get<CandidateProfile>(
+      `/api/candidates/${candidateId}/profile`,
     );
   return response.data;
 }

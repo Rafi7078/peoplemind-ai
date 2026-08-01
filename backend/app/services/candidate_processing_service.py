@@ -12,6 +12,9 @@ from backend.app.models.candidate_cv import (
 from backend.app.models.candidate_cv_page import (
     CandidateCVPage,
 )
+from backend.app.models.candidate_profile import (
+    CandidateProfile,
+)
 from backend.app.services.candidate_service import (
     CandidateCVNotFoundError,
     get_candidate_cv,
@@ -153,6 +156,14 @@ def process_candidate_cv(
                 CandidateCVPage
             ).where(
                 CandidateCVPage.candidate_cv_id
+                == candidate.id
+            )
+        )
+        database.execute(
+            delete(
+                CandidateProfile
+            ).where(
+                CandidateProfile.candidate_cv_id
                 == candidate.id
             )
         )

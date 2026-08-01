@@ -20,6 +20,9 @@ from backend.app.models.candidate_cv import (  # noqa: F401
 from backend.app.models.candidate_cv_page import (  # noqa: F401
     CandidateCVPage,
 )
+from backend.app.models.candidate_profile import (  # noqa: F401
+    CandidateProfile,
+)
 from backend.app.models.job_profile import (  # noqa: F401
     JobProfile,
 )
