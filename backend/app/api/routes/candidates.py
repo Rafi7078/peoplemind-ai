@@ -31,9 +31,13 @@ from backend.app.services.candidate_service import (
     CandidateCVNotFoundError,
     CandidateValidationError,
     DuplicateCandidateCVError,
+    delete_candidate_cv_permanently,
     get_candidate_cv_file,
     list_candidate_cvs,
     store_candidate_cv,
+)
+from backend.app.services.job_candidate_assignment_service import (
+    list_unassigned_candidates,
 )
 from backend.app.services import (
     candidate_profile_service,
@@ -105,6 +109,25 @@ def read_candidate_cvs(
             candidate
         )
         for candidate in list_candidate_cvs(
+            database
+        )
+    ]
+
+@router.get(
+    "/unassigned",
+    response_model=list[CandidateCVRead],
+    summary="List unassigned candidate CVs",
+)
+def read_unassigned_candidate_cvs(
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> list[CandidateCVRead]:
+    return [
+        CandidateCVRead.model_validate(
+            candidate
+        )
+        for candidate
+        in list_unassigned_candidates(
             database
         )
     ]
@@ -310,3 +333,33 @@ def read_structured_candidate_profile(
     return CandidateProfileRead.model_validate(
         profile
     )
+
+@router.delete(
+    "/{candidate_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete a candidate CV",
+)
+def delete_candidate_permanently(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> None:
+    try:
+        delete_candidate_cv_permanently(
+            database=database,
+            candidate_id=candidate_id,
+        )
+    except CandidateCVNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    except CandidateCVFileNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error

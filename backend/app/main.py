@@ -26,6 +26,9 @@ from backend.app.models.candidate_profile import (  # noqa: F401
 from backend.app.models.job_profile import (  # noqa: F401
     JobProfile,
 )
+from backend.app.models.job_candidate_assignment import (  # noqa: F401
+    JobCandidateAssignment,
+)
 from backend.app.models.document import Document  # noqa: F401
 from backend.app.models.document_chunk import (  # noqa: F401
     DocumentChunk,

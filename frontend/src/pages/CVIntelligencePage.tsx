@@ -12,14 +12,21 @@ import {
   CandidateProfilePanel,
 } from "../features/cv-intelligence/CandidateProfilePanel";
 import {
+  assignCandidateToJob,
   createJobProfile,
+  deleteCandidatePermanently,
+  deleteJobProfile,
   extractCandidateProfile,
   fetchCandidateCVFile,
   getCandidateProfile,
   listCandidateCVPages,
   listCandidateCVs,
+  listJobCandidateCVs,
   listJobProfiles,
+  listUnassignedCandidateCVs,
   processCandidateCV,
+  removeCandidateFromJob,
+  updateJobProfile,
   uploadCandidateCV,
 } from "../features/cv-intelligence/api";
 import type {
@@ -28,16 +35,21 @@ import type {
   CandidateProfile,
   JobProfile,
   JobProfileCreate,
+  JobProfileStatus,
 } from "../features/cv-intelligence/types";
-type Section =
+type ActiveSection =
   | "overview"
   | "jobs"
   | "candidates";
+type CandidateScope =
+  | "all"
+  | "unassigned"
+  | `job:${number}`;
 const emptyJobForm: JobProfileCreate = {
   title: "",
-  department: "",
-  location: "",
-  employment_type: "",
+  department: null,
+  location: null,
+  employment_type: null,
   description: "",
   status: "draft",
 };
@@ -53,8 +65,7 @@ function formatBytes(
     ).toFixed(1)} KB`;
   }
   return `${(
-    size /
-    (1024 * 1024)
+    size / (1024 * 1024)
   ).toFixed(1)} MB`;
 }
 function formatDate(
@@ -70,51 +81,10 @@ function formatDate(
     new Date(value),
   );
 }
-function statusClass(
-  status: string,
-): string {
-  switch (
-    status.toLowerCase()
-  ) {
-    case "active":
-    case "ready":
-      return (
-        "bg-emerald-100 " +
-        "text-emerald-700"
-      );
-    case "uploaded":
-    case "draft":
-      return (
-        "bg-amber-100 " +
-        "text-amber-700"
-      );
-    case "processing":
-      return (
-        "bg-violet-100 " +
-        "text-violet-700"
-      );
-    case "closed":
-      return (
-        "bg-slate-200 " +
-        "text-slate-700"
-      );
-    case "needs_ocr":
-    case "failed":
-      return (
-        "bg-red-100 " +
-        "text-red-700"
-      );
-    default:
-      return (
-        "bg-slate-100 " +
-        "text-slate-600"
-      );
-  }
-}
 function displayStatus(
-  status: string,
+  value: string,
 ): string {
-  return status
+  return value
     .replaceAll("_", " ")
     .replace(
       /\b\w/g,
@@ -122,78 +92,110 @@ function displayStatus(
         character.toUpperCase(),
     );
 }
+function statusClass(
+  value: string,
+): string {
+  switch (value.toLowerCase()) {
+    case "active":
+    case "ready":
+      return (
+        "bg-emerald-100 text-emerald-700"
+      );
+    case "draft":
+    case "uploaded":
+      return (
+        "bg-amber-100 text-amber-700"
+      );
+    case "closed":
+    case "archived":
+      return (
+        "bg-slate-200 text-slate-700"
+      );
+    case "processing":
+      return (
+        "bg-sky-100 text-sky-700"
+      );
+    case "needs_ocr":
+    case "failed":
+      return (
+        "bg-red-100 text-red-700"
+      );
+    default:
+      return (
+        "bg-slate-100 text-slate-600"
+      );
+  }
+}
 function getApiErrorMessage(
   error: unknown,
-  fallback: string,
+  fallbackMessage: string,
 ): string {
   if (
-    !axios.isAxiosError(error)
+    axios.isAxiosError(error)
   ) {
-    return fallback;
+    const detail =
+      error.response?.data?.detail;
+    if (
+      typeof detail === "string"
+      && detail.trim()
+    ) {
+      return detail;
+    }
+    if (
+      error.code
+      === "ECONNABORTED"
+    ) {
+      return (
+        "The request took too long. " +
+        "Confirm that the backend server is running and try again."
+      );
+    }
   }
+  return fallbackMessage;
+}
+function getScopeJobId(
+  scope: CandidateScope,
+): number | null {
   if (
-    error.code === "ECONNABORTED" ||
-    error.code === "ETIMEDOUT"
+    !scope.startsWith("job:")
   ) {
-    return (
-      "The request took too long. " +
-      "Confirm that the backend server " +
-      "is running and try again."
-    );
+    return null;
   }
-  if (!error.response) {
-    return (
-      "Backend server is not reachable. " +
-      "Confirm that FastAPI is running."
-    );
-  }
-  const responseData =
-    error.response.data as {
-      detail?: unknown;
-    };
-  if (
-    typeof responseData.detail
-    === "string"
-  ) {
-    return responseData.detail;
-  }
-  return fallback;
+  const jobId = Number(
+    scope.replace(
+      "job:",
+      "",
+    ),
+  );
+  return Number.isFinite(jobId)
+    ? jobId
+    : null;
 }
 export function CVIntelligencePage() {
   const [
     activeSection,
     setActiveSection,
-  ] = useState<Section>(
+  ] = useState<ActiveSection>(
     "overview",
   );
   const [
     jobProfiles,
     setJobProfiles,
-  ] = useState<JobProfile[]>(
-    [],
-  );
+  ] = useState<JobProfile[]>([]);
   const [
     candidates,
     setCandidates,
-  ] = useState<CandidateCV[]>(
-    [],
+  ] = useState<CandidateCV[]>([]);
+  const [
+    scopedCandidates,
+    setScopedCandidates,
+  ] = useState<CandidateCV[]>([]);
+  const [
+    candidateScope,
+    setCandidateScope,
+  ] = useState<CandidateScope>(
+    "all",
   );
-  const [
-    jobForm,
-    setJobForm,
-  ] = useState<JobProfileCreate>({
-    ...emptyJobForm,
-  });
-  const [
-    selectedFile,
-    setSelectedFile,
-  ] = useState<File | null>(
-    null,
-  );
-  const [
-    fileInputKey,
-    setFileInputKey,
-  ] = useState(0);
   const [
     selectedCandidateId,
     setSelectedCandidateId,
@@ -217,13 +219,13 @@ export function CVIntelligencePage() {
     setIsProfileLoading,
   ] = useState(false);
   const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true);
-  const [
     isPageLoading,
     setIsPageLoading,
   ] = useState(false);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
   const [
     busyAction,
     setBusyAction,
@@ -233,11 +235,53 @@ export function CVIntelligencePage() {
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState("");
+  ] = useState<string | null>(
+    null,
+  );
   const [
     activityMessage,
     setActivityMessage,
+  ] = useState<string | null>(
+    null,
+  );
+  const [
+    jobForm,
+    setJobForm,
+  ] = useState<JobProfileCreate>({
+    ...emptyJobForm,
+  });
+  const [
+    editingJobId,
+    setEditingJobId,
+  ] = useState<number | null>(
+    null,
+  );
+  const [
+    selectedFile,
+    setSelectedFile,
+  ] = useState<File | null>(
+    null,
+  );
+  const [
+    fileInputKey,
+    setFileInputKey,
+  ] = useState(0);
+  const [
+    assignmentJobId,
+    setAssignmentJobId,
   ] = useState("");
+  const displayedCandidates =
+    useMemo(
+      () =>
+        candidateScope === "all"
+          ? candidates
+          : scopedCandidates,
+      [
+        candidateScope,
+        candidates,
+        scopedCandidates,
+      ],
+    );
   const selectedCandidate =
     useMemo(
       () =>
@@ -245,44 +289,52 @@ export function CVIntelligencePage() {
           (candidate) =>
             candidate.id
             === selectedCandidateId,
-        ) ?? null,
+        )
+        ?? null,
       [
         candidates,
         selectedCandidateId,
       ],
     );
+  const currentScopeJobId =
+    getScopeJobId(
+      candidateScope,
+    );
+  const currentScopeJob =
+    useMemo(
+      () =>
+        currentScopeJobId === null
+          ? null
+          : (
+              jobProfiles.find(
+                (job) =>
+                  job.id
+                  === currentScopeJobId,
+              )
+              ?? null
+            ),
+      [
+        currentScopeJobId,
+        jobProfiles,
+      ],
+    );
   const activeJobCount =
-    useMemo(
-      () =>
-        jobProfiles.filter(
-          (job) =>
-            job.status === "active",
-        ).length,
-      [jobProfiles],
-    );
+    jobProfiles.filter(
+      (job) =>
+        job.status === "active",
+    ).length;
   const readyCandidateCount =
-    useMemo(
-      () =>
-        candidates.filter(
-          (candidate) =>
-            candidate.status
-            === "ready",
-        ).length,
-      [candidates],
-    );
+    candidates.filter(
+      (candidate) =>
+        candidate.status === "ready",
+    ).length;
   const needsOcrCount =
-    useMemo(
-      () =>
-        candidates.filter(
-          (candidate) =>
-            candidate.status
-            === "needs_ocr",
-        ).length,
-      [candidates],
-    );
+    candidates.filter(
+      (candidate) =>
+        candidate.status
+        === "needs_ocr",
+    ).length;
   useEffect(() => {
-    document.title =
-      "CV Intelligence | PeopleMind AI";
     let isActive = true;
     Promise.all([
       listJobProfiles(),
@@ -302,17 +354,10 @@ export function CVIntelligencePage() {
           setCandidates(
             candidateResult,
           );
-          if (
-            candidateResult.length > 0
-          ) {
-            setCandidatePages([]);
-            setCandidateProfile(null);
-            setIsPageLoading(true);
-            setIsProfileLoading(true);
-            setSelectedCandidateId(
-              candidateResult[0].id,
-            );
-          }
+          setSelectedCandidateId(
+            candidateResult[0]?.id
+            ?? null,
+          );
         },
       )
       .catch(
@@ -339,20 +384,37 @@ export function CVIntelligencePage() {
   }, []);
   useEffect(() => {
     if (
-      selectedCandidateId === null
+      candidateScope === "all"
     ) {
       return;
     }
     let isActive = true;
-    listCandidateCVPages(
-      selectedCandidateId,
-    )
-      .then((result) => {
-        if (isActive) {
-          setCandidatePages(
-            result,
+    const jobId = getScopeJobId(
+      candidateScope,
+    );
+    const request =
+      candidateScope
+      === "unassigned"
+        ? listUnassignedCandidateCVs()
+        : (
+            jobId === null
+              ? Promise.resolve([])
+              : listJobCandidateCVs(
+                  jobId,
+                )
           );
+    request
+      .then((result) => {
+        if (!isActive) {
+          return;
         }
+        setScopedCandidates(
+          result,
+        );
+        setSelectedCandidateId(
+          result[0]?.id
+          ?? null,
+        );
       })
       .catch(
         (error: unknown) => {
@@ -362,22 +424,15 @@ export function CVIntelligencePage() {
           setErrorMessage(
             getApiErrorMessage(
               error,
-              "Could not load extracted CV pages.",
+              "Could not load candidates for the selected filter.",
             ),
           );
         },
-      )
-      .finally(() => {
-        if (isActive) {
-          setIsPageLoading(
-            false,
-          );
-        }
-      });
+      );
     return () => {
       isActive = false;
     };
-  }, [selectedCandidateId]);
+  }, [candidateScope]);
   useEffect(() => {
     if (
       selectedCandidateId === null
@@ -385,51 +440,127 @@ export function CVIntelligencePage() {
       return;
     }
     let isActive = true;
-    getCandidateProfile(
-      selectedCandidateId,
-    )
-      .then((result) => {
-        if (isActive) {
-          setCandidateProfile(
-            result,
-          );
-        }
-      })
-      .catch(
+    Promise.all([
+      listCandidateCVPages(
+        selectedCandidateId,
+      ),
+      getCandidateProfile(
+        selectedCandidateId,
+      ).catch(
         (error: unknown) => {
-          if (!isActive) {
-            return;
-          }
           if (
             axios.isAxiosError(error)
             && error.response?.status
             === 404
           ) {
-            setCandidateProfile(null);
+            return null;
+          }
+          throw error;
+        },
+      ),
+    ])
+      .then(
+        ([
+          pageResult,
+          profileResult,
+        ]) => {
+          if (!isActive) {
+            return;
+          }
+          setCandidatePages(
+            pageResult,
+          );
+          setCandidateProfile(
+            profileResult,
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (!isActive) {
             return;
           }
           setErrorMessage(
             getApiErrorMessage(
               error,
-              "Could not load the structured candidate profile.",
+              "Could not load candidate details.",
             ),
           );
         },
       )
       .finally(() => {
-        if (isActive) {
-          setIsProfileLoading(
-            false,
-          );
+        if (!isActive) {
+          return;
         }
+        setIsPageLoading(false);
+        setIsProfileLoading(false);
       });
     return () => {
       isActive = false;
     };
   }, [selectedCandidateId]);
   function clearMessages(): void {
-    setErrorMessage("");
-    setActivityMessage("");
+    setErrorMessage(null);
+    setActivityMessage(null);
+  }
+  function selectCandidate(
+    candidateId: number,
+  ): void {
+    setCandidatePages([]);
+    setCandidateProfile(null);
+    setIsPageLoading(true);
+    setIsProfileLoading(true);
+    setSelectedCandidateId(
+      candidateId,
+    );
+  }
+  async function reloadAllCandidates():
+    Promise<CandidateCV[]> {
+    const result =
+      await listCandidateCVs();
+    setCandidates(result);
+    return result;
+  }
+  async function reloadCurrentScope():
+    Promise<void> {
+    if (
+      candidateScope === "all"
+    ) {
+      return;
+    }
+    const jobId = getScopeJobId(
+      candidateScope,
+    );
+    const result =
+      candidateScope
+      === "unassigned"
+        ? await listUnassignedCandidateCVs()
+        : (
+            jobId === null
+              ? []
+              : await listJobCandidateCVs(
+                  jobId,
+                )
+          );
+    setScopedCandidates(result);
+  }
+  function handleScopeChange(
+    value: string,
+  ): void {
+    const nextScope =
+      value as CandidateScope;
+    clearMessages();
+    setCandidateScope(
+      nextScope,
+    );
+    setCandidatePages([]);
+    setCandidateProfile(null);
+    setSelectedCandidateId(
+      nextScope === "all"
+        ? candidates[0]?.id
+          ?? null
+        : null,
+    );
   }
   function updateJobField(
     field: keyof JobProfileCreate,
@@ -438,77 +569,236 @@ export function CVIntelligencePage() {
     setJobForm(
       (current) => ({
         ...current,
-        [field]: value,
+        [field]:
+          field === "status"
+            ? (
+                value as JobProfileStatus
+              )
+            : value,
       }),
     );
   }
-  async function handleCreateJob(
+  function beginJobEdit(
+    job: JobProfile,
+  ): void {
+    clearMessages();
+    setEditingJobId(
+      job.id,
+    );
+    setJobForm({
+      title: job.title,
+      department:
+        job.department,
+      location:
+        job.location,
+      employment_type:
+        job.employment_type,
+      description:
+        job.description,
+      status:
+        job.status,
+    });
+    window.scrollTo({
+      top: 300,
+      behavior: "smooth",
+    });
+  }
+  function cancelJobEdit(): void {
+    setEditingJobId(null);
+    setJobForm({
+      ...emptyJobForm,
+    });
+  }
+  async function handleSaveJob(
     event: FormEvent<HTMLFormElement>,
   ): Promise<void> {
     event.preventDefault();
     clearMessages();
-    if (
-      jobForm.title.trim().length < 2
-    ) {
-      setErrorMessage(
-        "Enter a valid job title.",
-      );
-      return;
-    }
-    if (
-      jobForm.description
-        .trim().length < 20
-    ) {
-      setErrorMessage(
-        "Job description must contain " +
-        "at least 20 characters.",
-      );
-      return;
-    }
-    setBusyAction(
-      "create-job",
-    );
+    const payload: JobProfileCreate = {
+      title:
+        jobForm.title.trim(),
+      department:
+        jobForm.department
+          ?.trim()
+        || null,
+      location:
+        jobForm.location
+          ?.trim()
+        || null,
+      employment_type:
+        jobForm.employment_type
+          ?.trim()
+        || null,
+      description:
+        jobForm.description.trim(),
+      status:
+        jobForm.status,
+    };
+    const actionKey =
+      editingJobId === null
+        ? "create-job"
+        : `edit-job-${editingJobId}`;
+    setBusyAction(actionKey);
     try {
-      const createdJob =
-        await createJobProfile({
-          title:
-            jobForm.title.trim(),
-          department:
-            jobForm.department
-              ?.trim() || null,
-          location:
-            jobForm.location
-              ?.trim() || null,
-          employment_type:
-            jobForm.employment_type
-              ?.trim() || null,
-          description:
-            jobForm.description.trim(),
-          status:
-            jobForm.status,
-        });
-      setJobProfiles(
-        (current) => [
-          createdJob,
-          ...current,
-        ],
-      );
+      if (
+        editingJobId === null
+      ) {
+        const createdJob =
+          await createJobProfile(
+            payload,
+          );
+        setJobProfiles(
+          (current) => [
+            createdJob,
+            ...current,
+          ],
+        );
+        setActivityMessage(
+          "Job profile created successfully.",
+        );
+      } else {
+        const updatedJob =
+          await updateJobProfile(
+            editingJobId,
+            payload,
+          );
+        setJobProfiles(
+          (current) =>
+            current.map(
+              (job) =>
+                job.id
+                === updatedJob.id
+                  ? updatedJob
+                  : job,
+            ),
+        );
+        setActivityMessage(
+          "Job profile updated successfully.",
+        );
+      }
+      setEditingJobId(null);
       setJobForm({
         ...emptyJobForm,
       });
-      setActivityMessage(
-        "Job profile created successfully.",
-      );
     } catch (error) {
       setErrorMessage(
         getApiErrorMessage(
           error,
-          "Could not create the job profile.",
+          "Could not save the job profile.",
         ),
       );
     } finally {
       setBusyAction(null);
     }
+  }
+  async function handleArchiveJob(
+    job: JobProfile,
+  ): Promise<void> {
+    clearMessages();
+    setBusyAction(
+      `archive-job-${job.id}`,
+    );
+    try {
+      const updatedJob =
+        await updateJobProfile(
+          job.id,
+          {
+            status:
+              job.status
+              === "archived"
+                ? "draft"
+                : "archived",
+          },
+        );
+      setJobProfiles(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id === job.id
+                ? updatedJob
+                : item,
+          ),
+      );
+      setActivityMessage(
+        updatedJob.status
+        === "archived"
+          ? "Job profile archived successfully."
+          : "Job profile restored as a draft.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not update the job status.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleDeleteJob(
+    job: JobProfile,
+  ): Promise<void> {
+    const confirmed =
+      window.confirm(
+        `Delete "${job.title}"?\n\n` +
+        "Its candidate assignments will be removed, " +
+        "but the candidate CV files will be preserved.",
+      );
+    if (!confirmed) {
+      return;
+    }
+    clearMessages();
+    setBusyAction(
+      `delete-job-${job.id}`,
+    );
+    try {
+      await deleteJobProfile(
+        job.id,
+      );
+      setJobProfiles(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !== job.id,
+          ),
+      );
+      if (
+        currentScopeJobId
+        === job.id
+      ) {
+        setCandidateScope(
+          "all",
+        );
+        setScopedCandidates([]);
+      }
+      setActivityMessage(
+        "Job profile deleted. Candidate CV files were preserved.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not delete the job profile.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  function openJobCandidates(
+    job: JobProfile,
+  ): void {
+    clearMessages();
+    setCandidateScope(
+      `job:${job.id}`,
+    );
+    setActiveSection(
+      "candidates",
+    );
+    setSelectedCandidateId(null);
+    setCandidatePages([]);
+    setCandidateProfile(null);
   }
   async function handleUploadCandidate(
     event: FormEvent<HTMLFormElement>,
@@ -539,17 +829,21 @@ export function CVIntelligencePage() {
         await uploadCandidateCV(
           selectedFile,
         );
-      setCandidates(
-        (current) => [
-          uploadedCandidate,
-          ...current,
-        ],
-      );
-      setCandidatePages([]);
-      setCandidateProfile(null);
-      setIsPageLoading(true);
-      setIsProfileLoading(true);
-      setSelectedCandidateId(
+      const scopeJobId =
+        getScopeJobId(
+          candidateScope,
+        );
+      if (
+        scopeJobId !== null
+      ) {
+        await assignCandidateToJob(
+          scopeJobId,
+          uploadedCandidate.id,
+        );
+      }
+      await reloadAllCandidates();
+      await reloadCurrentScope();
+      selectCandidate(
         uploadedCandidate.id,
       );
       setSelectedFile(null);
@@ -558,14 +852,155 @@ export function CVIntelligencePage() {
           current + 1,
       );
       setActivityMessage(
-        "Candidate CV uploaded successfully. " +
-        "Process it to extract the CV text.",
+        scopeJobId === null
+          ? (
+              "Candidate CV uploaded successfully. " +
+              "It is currently unassigned."
+            )
+          : (
+              "Candidate CV uploaded and assigned " +
+              "to the selected job successfully."
+            ),
       );
     } catch (error) {
       setErrorMessage(
         getApiErrorMessage(
           error,
           "Could not upload the candidate CV.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleAssignCandidate():
+    Promise<void> {
+    if (
+      selectedCandidateId === null
+    ) {
+      setErrorMessage(
+        "Select a candidate first.",
+      );
+      return;
+    }
+    const jobId = Number(
+      assignmentJobId,
+    );
+    if (
+      !Number.isFinite(jobId)
+      || jobId <= 0
+    ) {
+      setErrorMessage(
+        "Select a job profile first.",
+      );
+      return;
+    }
+    clearMessages();
+    setBusyAction(
+      `assign-${selectedCandidateId}`,
+    );
+    try {
+      await assignCandidateToJob(
+        jobId,
+        selectedCandidateId,
+      );
+      await reloadCurrentScope();
+      setActivityMessage(
+        "Candidate assigned to the selected job successfully.",
+      );
+      setAssignmentJobId("");
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not assign the candidate to the job.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleRemoveFromCurrentJob():
+    Promise<void> {
+    if (
+      selectedCandidateId === null
+      || currentScopeJobId === null
+    ) {
+      return;
+    }
+    const confirmed =
+      window.confirm(
+        "Remove this candidate from the selected job?\n\n" +
+        "The candidate CV and structured profile will be preserved.",
+      );
+    if (!confirmed) {
+      return;
+    }
+    clearMessages();
+    setBusyAction(
+      `remove-${selectedCandidateId}`,
+    );
+    try {
+      await removeCandidateFromJob(
+        currentScopeJobId,
+        selectedCandidateId,
+      );
+      await reloadCurrentScope();
+      setSelectedCandidateId(null);
+      setCandidatePages([]);
+      setCandidateProfile(null);
+      setActivityMessage(
+        "Candidate removed from this job. The CV was preserved.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not remove the candidate from this job.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+  async function handleDeleteCandidate():
+    Promise<void> {
+    if (
+      selectedCandidate === null
+    ) {
+      return;
+    }
+    const confirmed =
+      window.confirm(
+        `Permanently delete "${selectedCandidate.original_name}"?\n\n` +
+        "This will remove the original PDF, extracted pages, " +
+        "structured profile and all job assignments.\n\n" +
+        "This action cannot be undone.",
+      );
+    if (!confirmed) {
+      return;
+    }
+    clearMessages();
+    setBusyAction(
+      `delete-candidate-${selectedCandidate.id}`,
+    );
+    try {
+      await deleteCandidatePermanently(
+        selectedCandidate.id,
+      );
+      await reloadAllCandidates();
+      await reloadCurrentScope();
+      setSelectedCandidateId(null);
+      setCandidatePages([]);
+      setCandidateProfile(null);
+      setActivityMessage(
+        "Candidate CV and all related records were permanently deleted.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not permanently delete the candidate.",
         ),
       );
     } finally {
@@ -626,49 +1061,6 @@ export function CVIntelligencePage() {
       setBusyAction(null);
     }
   }
-  async function handleExtractCandidateProfile(
-    candidate: CandidateCV,
-  ): Promise<void> {
-    clearMessages();
-    if (
-      candidate.status !== "ready"
-    ) {
-      setErrorMessage(
-        "Process this CV successfully before extracting its structured profile.",
-      );
-      return;
-    }
-    setBusyAction(
-      `profile-${candidate.id}`,
-    );
-    setIsProfileLoading(true);
-    try {
-      const profile =
-        await extractCandidateProfile(
-          candidate.id,
-        );
-      setCandidateProfile(
-        profile,
-      );
-      setSelectedCandidateId(
-        candidate.id,
-      );
-      setActivityMessage(
-        "Structured candidate profile extracted successfully. " +
-        "Verify the result against the original CV.",
-      );
-    } catch (error) {
-      setErrorMessage(
-        getApiErrorMessage(
-          error,
-          "Could not extract the structured candidate profile.",
-        ),
-      );
-    } finally {
-      setBusyAction(null);
-      setIsProfileLoading(false);
-    }
-  }
   async function handleProcessCandidate(
     candidate: CandidateCV,
   ): Promise<void> {
@@ -708,10 +1100,6 @@ export function CVIntelligencePage() {
                 : item,
           ),
       );
-      setSelectedCandidateId(
-        candidate.id,
-      );
-      setIsPageLoading(true);
       const pages =
         await listCandidateCVPages(
           candidate.id,
@@ -720,35 +1108,19 @@ export function CVIntelligencePage() {
         pages,
       );
       setCandidateProfile(null);
-      setIsProfileLoading(false);
       if (
-        result.status === "needs_ocr"
+        result.status
+        === "needs_ocr"
       ) {
         setActivityMessage(
-          "CV processing completed, but " +
-          "no selectable text was found. " +
-          "This CV requires OCR.",
+          "CV processing completed, but no selectable text was found.",
         );
       } else {
         setActivityMessage(
-          "CV text extracted successfully. " +
-          `${result.text_pages} text page(s) and ` +
-          `${result.total_characters} characters found.`,
+          "CV text extracted successfully.",
         );
       }
     } catch (error) {
-      setCandidates(
-        (current) =>
-          current.map(
-            (item) =>
-              item.id === candidate.id
-                ? {
-                    ...item,
-                    status: "failed",
-                  }
-                : item,
-          ),
-      );
       setErrorMessage(
         getApiErrorMessage(
           error,
@@ -758,6 +1130,38 @@ export function CVIntelligencePage() {
     } finally {
       setBusyAction(null);
       setIsPageLoading(false);
+    }
+  }
+  async function handleExtractCandidateProfile(
+    candidate: CandidateCV,
+  ): Promise<void> {
+    clearMessages();
+    setBusyAction(
+      `profile-${candidate.id}`,
+    );
+    setIsProfileLoading(true);
+    try {
+      const profile =
+        await extractCandidateProfile(
+          candidate.id,
+        );
+      setCandidateProfile(
+        profile,
+      );
+      setActivityMessage(
+        "Structured candidate profile extracted successfully. " +
+        "Verify the result against the original CV.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not extract the structured candidate profile.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+      setIsProfileLoading(false);
     }
   }
   if (isLoading) {
@@ -774,20 +1178,17 @@ export function CVIntelligencePage() {
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
       <section className="overflow-hidden rounded-3xl bg-slate-950 px-8 py-9 text-white shadow-xl">
-        <div className="max-w-4xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-sky-400">
-            Human-reviewed recruitment intelligence
-          </p>
-          <h1 className="mt-4 text-3xl font-bold md:text-5xl">
-            CV Intelligence
-          </h1>
-          <p className="mt-5 max-w-3xl leading-7 text-slate-300">
-            Create job profiles, securely upload
-            candidate CVs and prepare structured
-            evidence for ATS analysis and
-            job-matching workflows.
-          </p>
-        </div>
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-sky-400">
+          Human-reviewed recruitment intelligence
+        </p>
+        <h1 className="mt-4 text-3xl font-bold md:text-5xl">
+          CV Intelligence
+        </h1>
+        <p className="mt-5 max-w-3xl leading-7 text-slate-300">
+          Manage job profiles, organize candidate
+          CVs and prepare structured evidence for
+          ATS and job-matching workflows.
+        </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <span className="rounded-full bg-sky-400/15 px-4 py-2 text-sm font-semibold text-sky-300">
             {jobProfiles.length} job profile(s)
@@ -847,152 +1248,60 @@ export function CVIntelligencePage() {
           {activityMessage}
         </div>
       ) : null}
-      {activeSection
-      === "overview" ? (
-        <section className="mt-8">
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      {activeSection === "overview" ? (
+        <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Job profiles",
+              value:
+                jobProfiles.length,
+            },
+            {
+              label: "Active jobs",
+              value:
+                activeJobCount,
+            },
+            {
+              label: "CVs ready",
+              value:
+                readyCandidateCount,
+            },
+            {
+              label: "Needs OCR",
+              value:
+                needsOcrCount,
+            },
+          ].map((item) => (
+            <article
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+              key={item.label}
+            >
               <p className="text-sm font-semibold text-slate-500">
-                Job profiles
+                {item.label}
               </p>
               <p className="mt-3 text-4xl font-bold text-slate-950">
-                {jobProfiles.length}
+                {item.value}
               </p>
             </article>
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold text-slate-500">
-                Active jobs
-              </p>
-              <p className="mt-3 text-4xl font-bold text-slate-950">
-                {activeJobCount}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold text-slate-500">
-                CVs ready
-              </p>
-              <p className="mt-3 text-4xl font-bold text-slate-950">
-                {readyCandidateCount}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold text-slate-500">
-                Needs OCR
-              </p>
-              <p className="mt-3 text-4xl font-bold text-slate-950">
-                {needsOcrCount}
-              </p>
-            </article>
-          </div>
-          <div className="mt-7 grid gap-6 lg:grid-cols-2">
-            <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
-                Current workflow
-              </h2>
-              <div className="mt-6 space-y-4">
-                {[
-                  "Create and review a job profile.",
-                  "Upload one or more candidate CV PDFs.",
-                  "Process each CV to extract page-wise text.",
-                  "Run ATS compatibility analysis.",
-                  "Match candidates against job requirements.",
-                  "HR reviews evidence before any decision.",
-                ].map(
-                  (
-                    step,
-                    index,
-                  ) => (
-                    <div
-                      className="flex gap-4"
-                      key={step}
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
-                        {index + 1}
-                      </span>
-                      <p className="pt-1 leading-6 text-slate-600">
-                        {step}
-                      </p>
-                    </div>
-                  ),
-                )}
-              </div>
-            </article>
-            <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
-                Foundation status
-              </h2>
-              <div className="mt-6 space-y-4">
-                {[
-                  {
-                    label:
-                      "Secure CV PDF upload",
-                    status:
-                      "Available",
-                  },
-                  {
-                    label:
-                      "Duplicate detection",
-                    status:
-                      "Available",
-                  },
-                  {
-                    label:
-                      "Page-wise text extraction",
-                    status:
-                      "Available",
-                  },
-                  {
-                    label:
-                      "Scanned CV detection",
-                    status:
-                      "Available",
-                  },
-                  {
-                    label:
-                      "ATS scoring engine",
-                    status:
-                      "Next stage",
-                  },
-                  {
-                    label:
-                      "Job matching and ranking",
-                    status:
-                      "Next stage",
-                  },
-                ].map((item) => (
-                  <div
-                    className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-4 py-3"
-                    key={item.label}
-                  >
-                    <span className="text-sm font-medium text-slate-700">
-                      {item.label}
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      {item.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
+          ))}
         </section>
       ) : null}
       {activeSection === "jobs" ? (
         <section className="mt-8 grid gap-7 lg:grid-cols-[0.9fr_1.1fr]">
           <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
             <h2 className="text-2xl font-bold text-slate-950">
-              Create job profile
+              {editingJobId === null
+                ? "Create job profile"
+                : "Edit job profile"}
             </h2>
             <p className="mt-2 leading-6 text-slate-600">
-              Add the original job description.
-              Structured requirements and scoring
-              weights will be added in the next
-              stage.
+              Candidate CVs can be assigned to one
+              or more job profiles.
             </p>
             <form
               className="mt-7 space-y-5"
               onSubmit={
-                handleCreateJob
+                handleSaveJob
               }
             >
               <label className="block">
@@ -1000,51 +1309,48 @@ export function CVIntelligencePage() {
                   Job title
                 </span>
                 <input
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
                   onChange={(event) => {
                     updateJobField(
                       "title",
                       event.target.value,
                     );
                   }}
-                  placeholder="Software QA Engineer"
                   required
                   value={jobForm.title}
                 />
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
+                <label>
                   <span className="text-sm font-semibold text-slate-700">
                     Department
                   </span>
                   <input
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
                     onChange={(event) => {
                       updateJobField(
                         "department",
                         event.target.value,
                       );
                     }}
-                    placeholder="Engineering"
                     value={
                       jobForm.department
                       ?? ""
                     }
                   />
                 </label>
-                <label className="block">
+                <label>
                   <span className="text-sm font-semibold text-slate-700">
                     Location
                   </span>
                   <input
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
                     onChange={(event) => {
                       updateJobField(
                         "location",
                         event.target.value,
                       );
                     }}
-                    placeholder="Dhaka"
                     value={
                       jobForm.location
                       ?? ""
@@ -1053,12 +1359,12 @@ export function CVIntelligencePage() {
                 </label>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
+                <label>
                   <span className="text-sm font-semibold text-slate-700">
                     Employment type
                   </span>
                   <select
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
                     onChange={(event) => {
                       updateJobField(
                         "employment_type",
@@ -1087,12 +1393,12 @@ export function CVIntelligencePage() {
                     </option>
                   </select>
                 </label>
-                <label className="block">
+                <label>
                   <span className="text-sm font-semibold text-slate-700">
                     Status
                   </span>
                   <select
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
                     onChange={(event) => {
                       updateJobField(
                         "status",
@@ -1110,6 +1416,11 @@ export function CVIntelligencePage() {
                     <option value="closed">
                       Closed
                     </option>
+                    {editingJobId !== null ? (
+                      <option value="archived">
+                        Archived
+                      </option>
+                    ) : null}
                   </select>
                 </label>
               </div>
@@ -1118,128 +1429,223 @@ export function CVIntelligencePage() {
                   Job description
                 </span>
                 <textarea
-                  className="mt-2 min-h-56 w-full resize-y rounded-xl border border-slate-300 px-4 py-3 leading-6 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                  className="mt-2 min-h-56 w-full resize-y rounded-xl border border-slate-300 px-4 py-3"
                   onChange={(event) => {
                     updateJobField(
                       "description",
                       event.target.value,
                     );
                   }}
-                  placeholder="Paste the complete job description, required skills, experience and responsibilities..."
                   required
                   value={
                     jobForm.description
                   }
                 />
               </label>
-              <button
-                className="w-full rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={
-                  busyAction !== null
-                }
-                type="submit"
-              >
-                {busyAction
-                === "create-job"
-                  ? "Creating..."
-                  : "Create job profile"}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:opacity-60"
+                  disabled={
+                    busyAction !== null
+                  }
+                  type="submit"
+                >
+                  {busyAction
+                  === "create-job"
+                    ? "Creating..."
+                    : editingJobId !== null
+                      ? "Save changes"
+                      : "Create job profile"}
+                </button>
+                {editingJobId !== null ? (
+                  <button
+                    className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700"
+                    onClick={
+                      cancelJobEdit
+                    }
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </form>
           </article>
           <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-950">
-                  Job profiles
-                </h2>
-                <p className="mt-1 text-slate-600">
-                  {jobProfiles.length} profile(s)
-                  available.
-                </p>
-              </div>
-            </div>
-            {jobProfiles.length === 0 ? (
-              <div className="mt-7 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-                No job profiles have been created.
-              </div>
-            ) : (
-              <div className="mt-7 space-y-4">
-                {jobProfiles.map(
-                  (job) => (
-                    <article
-                      className="rounded-2xl border border-slate-200 p-5"
-                      key={job.id}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-900">
-                            {job.title}
-                          </h3>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {[
-                              job.department,
-                              job.location,
-                              job.employment_type,
-                            ]
-                              .filter(Boolean)
-                              .join(" ? ")
-                              || "Additional details not provided"}
-                          </p>
-                        </div>
-                        <span
-                          className={[
-                            "rounded-full px-3 py-1 text-xs font-bold",
-                            statusClass(
-                              job.status,
-                            ),
-                          ].join(" ")}
-                        >
-                          {displayStatus(
-                            job.status,
-                          )}
-                        </span>
+            <h2 className="text-2xl font-bold text-slate-950">
+              Job profiles
+            </h2>
+            <p className="mt-1 text-slate-600">
+              {jobProfiles.length} profile(s)
+              available.
+            </p>
+            <div className="mt-7 space-y-4">
+              {jobProfiles.map(
+                (job) => (
+                  <article
+                    className="rounded-2xl border border-slate-200 p-5"
+                    key={job.id}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">
+                          {job.title}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {[
+                            job.department,
+                            job.location,
+                            job.employment_type,
+                          ]
+                            .filter(Boolean)
+                            .join(" ? ")
+                            || "Additional details not provided"}
+                        </p>
                       </div>
-                      <p className="mt-4 line-clamp-4 whitespace-pre-wrap leading-6 text-slate-600">
-                        {job.description}
-                      </p>
-                      <p className="mt-4 text-xs font-medium text-slate-400">
-                        Created{" "}
-                        {formatDate(
-                          job.created_at,
+                      <span
+                        className={[
+                          "rounded-full px-3 py-1 text-xs font-bold",
+                          statusClass(
+                            job.status,
+                          ),
+                        ].join(" ")}
+                      >
+                        {displayStatus(
+                          job.status,
                         )}
-                      </p>
-                    </article>
-                  ),
-                )}
-              </div>
-            )}
+                      </span>
+                    </div>
+                    <p className="mt-4 line-clamp-4 whitespace-pre-wrap leading-6 text-slate-600">
+                      {job.description}
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white"
+                        onClick={() => {
+                          openJobCandidates(
+                            job,
+                          );
+                        }}
+                        type="button"
+                      >
+                        View candidates
+                      </button>
+                      <button
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                        onClick={() => {
+                          beginJobEdit(job);
+                        }}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-700"
+                        onClick={() => {
+                          void handleArchiveJob(
+                            job,
+                          );
+                        }}
+                        type="button"
+                      >
+                        {job.status
+                        === "archived"
+                          ? "Restore"
+                          : "Archive"}
+                      </button>
+                      <button
+                        className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700"
+                        onClick={() => {
+                          void handleDeleteJob(
+                            job,
+                          );
+                        }}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                ),
+              )}
+            </div>
           </article>
         </section>
       ) : null}
-      {activeSection
-      === "candidates" ? (
+      {activeSection === "candidates" ? (
         <section className="mt-8">
-          <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <label>
+                <span className="text-sm font-semibold text-slate-700">
+                  Candidate list
+                </span>
+                <select
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"
+                  onChange={(event) => {
+                    handleScopeChange(
+                      event.target.value,
+                    );
+                  }}
+                  value={
+                    candidateScope
+                  }
+                >
+                  <option value="all">
+                    All candidates
+                  </option>
+                  <option value="unassigned">
+                    Unassigned candidates
+                  </option>
+                  {jobProfiles.map(
+                    (job) => (
+                      <option
+                        key={job.id}
+                        value={`job:${job.id}`}
+                      >
+                        {job.title}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-800">
+                  Current view
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {candidateScope
+                  === "all"
+                    ? "Showing every uploaded candidate."
+                    : candidateScope
+                      === "unassigned"
+                      ? "Showing CVs not assigned to any job."
+                      : `Showing candidates for ${currentScopeJob?.title ?? "the selected job"}.`}
+                </p>
+              </div>
+            </div>
+          </article>
+          <article className="mt-6 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
             <div className="grid gap-7 lg:grid-cols-[1fr_auto] lg:items-end">
               <div>
                 <h2 className="text-2xl font-bold text-slate-950">
                   Upload candidate CV
                 </h2>
                 <p className="mt-2 leading-6 text-slate-600">
-                  Upload a selectable-text PDF.
-                  Scanned PDFs will be marked as
-                  requiring OCR.
+                  {currentScopeJob
+                    ? `The uploaded CV will automatically be assigned to ${currentScopeJob.title}.`
+                    : "The uploaded CV will remain unassigned until it is linked to a job."}
                 </p>
               </div>
               <form
-                className="flex flex-col gap-3 sm:flex-row sm:items-center"
+                className="flex flex-col gap-3 sm:flex-row"
                 onSubmit={
                   handleUploadCandidate
                 }
               >
                 <input
                   accept=".pdf,application/pdf"
-                  className="block max-w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:font-semibold file:text-white"
+                  className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm"
                   key={fileInputKey}
                   onChange={(event) => {
                     setSelectedFile(
@@ -1250,7 +1656,7 @@ export function CVIntelligencePage() {
                   type="file"
                 />
                 <button
-                  className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
                   disabled={
                     busyAction !== null
                   }
@@ -1266,81 +1672,68 @@ export function CVIntelligencePage() {
           </article>
           <div className="mt-7 grid gap-7 lg:grid-cols-[0.85fr_1.15fr]">
             <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div>
-                <h2 className="text-xl font-bold text-slate-950">
-                  Candidate CVs
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {candidates.length} uploaded
-                  candidate(s)
-                </p>
-              </div>
-              {candidates.length === 0 ? (
+              <h2 className="text-xl font-bold text-slate-950">
+                Candidate CVs
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {displayedCandidates.length}
+                {" "}candidate(s) in this view
+              </p>
+              {displayedCandidates.length
+              === 0 ? (
                 <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-                  No candidate CV has been uploaded.
+                  No candidate CV is available in this view.
                 </div>
               ) : (
                 <div className="mt-6 space-y-3">
-                  {candidates.map(
-                    (candidate) => {
-                      const isSelected =
-                        candidate.id
-                        === selectedCandidateId;
-                      return (
-                        <button
-                          className={[
-                            "w-full rounded-2xl border p-4 text-left transition",
-                            isSelected
-                              ? "border-sky-400 bg-sky-50"
-                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
-                          ].join(" ")}
-                          key={
-                            candidate.id
-                          }
-                          onClick={() => {
-                            setCandidatePages([]);
-                            setCandidateProfile(null);
-                            setIsPageLoading(true);
-                            setIsProfileLoading(true);
-                            setSelectedCandidateId(
-                              candidate.id,
-                            );
-                          }}
-                          type="button"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-slate-900">
-                                {
-                                  candidate.original_name
-                                }
-                              </p>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {formatBytes(
-                                  candidate.size_bytes,
-                                )}
-                                {" ? "}
-                                {formatDate(
-                                  candidate.created_at,
-                                )}
-                              </p>
-                            </div>
-                            <span
-                              className={[
-                                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold",
-                                statusClass(
-                                  candidate.status,
-                                ),
-                              ].join(" ")}
-                            >
-                              {displayStatus(
-                                candidate.status,
+                  {displayedCandidates.map(
+                    (candidate) => (
+                      <button
+                        className={[
+                          "w-full rounded-2xl border p-4 text-left transition",
+                          candidate.id
+                          === selectedCandidateId
+                            ? "border-sky-400 bg-sky-50"
+                            : "border-slate-200 hover:bg-slate-50",
+                        ].join(" ")}
+                        key={candidate.id}
+                        onClick={() => {
+                          selectCandidate(
+                            candidate.id,
+                          );
+                        }}
+                        type="button"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">
+                              {candidate.original_name}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {formatBytes(
+                                candidate.size_bytes,
                               )}
-                            </span>
+                              {" ? "}
+                              {formatDate(
+                                candidate.created_at,
+                              )}
+                            </p>
                           </div>
-                        </button>
-                      );
-                    },
+                          <span
+                            className={[
+                              "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                              statusClass(
+                                candidate.status,
+                              ),
+                            ].join(" ")}
+                          >
+                            {displayStatus(
+                              candidate.status,
+                            )}
+                          </span>
+                        </div>
+                      </button>
+                    ),
                   )}
                 </div>
               )}
@@ -1348,20 +1741,17 @@ export function CVIntelligencePage() {
             <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               {!selectedCandidate ? (
                 <div className="flex min-h-72 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-                  Select a candidate CV to view
-                  processing details.
+                  Select a candidate CV to view its details.
                 </div>
               ) : (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
+                    <div>
                       <p className="text-sm font-semibold uppercase tracking-wide text-sky-600">
                         Candidate CV
                       </p>
                       <h2 className="mt-2 break-words text-2xl font-bold text-slate-950">
-                        {
-                          selectedCandidate.original_name
-                        }
+                        {selectedCandidate.original_name}
                       </h2>
                       <p className="mt-2 text-sm text-slate-500">
                         {formatBytes(
@@ -1387,20 +1777,9 @@ export function CVIntelligencePage() {
                       )}
                     </span>
                   </div>
-                  {selectedCandidate.status
-                  === "needs_ocr" ? (
-                    <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
-                      No selectable text was found.
-                      This appears to be a scanned or
-                      image-based CV and requires OCR.
-                    </div>
-                  ) : null}
                   <div className="mt-6 flex flex-wrap gap-3">
                     <button
-                      className="rounded-xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={
-                        busyAction !== null
-                      }
+                      className="rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white"
                       onClick={() => {
                         void handleOpenOriginalCV(
                           selectedCandidate,
@@ -1408,16 +1787,10 @@ export function CVIntelligencePage() {
                       }}
                       type="button"
                     >
-                      {busyAction
-                      === `open-${selectedCandidate.id}`
-                        ? "Opening..."
-                        : "Open original CV"}
+                      Open original CV
                     </button>
                     <button
-                      className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={
-                        busyAction !== null
-                      }
+                      className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
                       onClick={() => {
                         void handleProcessCandidate(
                           selectedCandidate,
@@ -1425,19 +1798,15 @@ export function CVIntelligencePage() {
                       }}
                       type="button"
                     >
-                      {busyAction
-                      === `process-${selectedCandidate.id}`
-                        ? "Processing..."
-                        : selectedCandidate.status
-                          === "ready"
-                          ? "Process again"
-                          : "Process CV"}
+                      {selectedCandidate.status
+                      === "ready"
+                        ? "Process again"
+                        : "Process CV"}
                     </button>
                     <button
-                      className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                       disabled={
-                        busyAction !== null
-                        || selectedCandidate.status
+                        selectedCandidate.status
                         !== "ready"
                       }
                       onClick={() => {
@@ -1447,13 +1816,74 @@ export function CVIntelligencePage() {
                       }}
                       type="button"
                     >
-                      {busyAction
-                      === `profile-${selectedCandidate.id}`
-                        ? "Extracting profile..."
-                        : candidateProfile
-                          ? "Re-extract structured profile"
-                          : "Extract structured profile"}
+                      {candidateProfile
+                        ? "Re-extract structured profile"
+                        : "Extract structured profile"}
                     </button>
+                  </div>
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="font-semibold text-slate-900">
+                      Job assignment
+                    </p>
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <select
+                        className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3"
+                        onChange={(event) => {
+                          setAssignmentJobId(
+                            event.target.value,
+                          );
+                        }}
+                        value={
+                          assignmentJobId
+                        }
+                      >
+                        <option value="">
+                          Select job profile
+                        </option>
+                        {jobProfiles.map(
+                          (job) => (
+                            <option
+                              key={job.id}
+                              value={job.id}
+                            >
+                              {job.title}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                      <button
+                        className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white"
+                        onClick={() => {
+                          void handleAssignCandidate();
+                        }}
+                        type="button"
+                      >
+                        Assign to job
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {currentScopeJobId
+                      !== null ? (
+                        <button
+                          className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-700"
+                          onClick={() => {
+                            void handleRemoveFromCurrentJob();
+                          }}
+                          type="button"
+                        >
+                          Remove from this job
+                        </button>
+                      ) : null}
+                      <button
+                        className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700"
+                        onClick={() => {
+                          void handleDeleteCandidate();
+                        }}
+                        type="button"
+                      >
+                        Delete candidate permanently
+                      </button>
+                    </div>
                   </div>
                   <CandidateProfilePanel
                     isLoading={
@@ -1464,72 +1894,44 @@ export function CVIntelligencePage() {
                     }
                   />
                   <details className="mt-7 border-t border-slate-200 pt-6">
-                    <summary className="cursor-pointer rounded-xl bg-slate-100 px-4 py-3 font-semibold text-slate-800 transition hover:bg-slate-200">
+                    <summary className="cursor-pointer rounded-xl bg-slate-100 px-4 py-3 font-semibold text-slate-800">
                       Show extraction audit (raw text)
                     </summary>
-                    <p className="mt-4 text-sm leading-6 text-slate-500">
-                      This technical view shows layout-aware
-                      text returned by the PDF parser. Use the
-                      original CV for normal human review.
-                    </p>
-                    <div className="mt-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <h3 className="text-lg font-bold text-slate-900">
-                        Extracted page text
-                      </h3>
-                      <span className="text-sm text-slate-500">
-                        {candidatePages.length} page(s)
-                      </span>
-                    </div>
                     {isPageLoading ? (
-                      <div className="mt-5 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">
+                      <p className="mt-5 text-sm text-slate-500">
                         Loading extracted pages...
-                      </div>
+                      </p>
                     ) : null}
                     {!isPageLoading
                     && candidatePages.length
                     === 0 ? (
-                      <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        Process this CV to extract and
-                        preview page text.
-                      </div>
+                      <p className="mt-5 text-sm text-slate-500">
+                        No extracted page text is available.
+                      </p>
                     ) : null}
-                    {!isPageLoading
-                    && candidatePages.length
-                    > 0 ? (
-                      <div className="mt-5 space-y-4">
-                        {candidatePages.map(
-                          (page) => (
-                            <article
-                              className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
-                              key={
-                                page.page_number
-                              }
-                            >
-                              <div className="flex items-center justify-between gap-4">
-                                <h4 className="font-bold text-slate-800">
-                                  Page{" "}
-                                  {
-                                    page.page_number
-                                  }
-                                </h4>
-                                <span className="text-xs font-medium text-slate-500">
-                                  {
-                                    page.char_count
-                                  }{" "}
-                                  characters
-                                </span>
-                              </div>
-                              <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-600">
-                                {page.text
-                                || "No selectable text found on this page."}
-                              </pre>
-                            </article>
-                          ),
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
+                    <div className="mt-5 space-y-4">
+                      {candidatePages.map(
+                        (page) => (
+                          <article
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                            key={page.page_number}
+                          >
+                            <div className="flex justify-between gap-4">
+                              <h4 className="font-bold text-slate-800">
+                                Page {page.page_number}
+                              </h4>
+                              <span className="text-xs text-slate-500">
+                                {page.char_count} characters
+                              </span>
+                            </div>
+                            <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-600">
+                              {page.text
+                              || "No selectable text found."}
+                            </pre>
+                          </article>
+                        ),
+                      )}
+                    </div>
                   </details>
                 </>
               )}

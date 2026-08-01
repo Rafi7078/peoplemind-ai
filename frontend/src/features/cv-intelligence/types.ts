@@ -2,7 +2,8 @@
 export type JobProfileStatus =
   | "draft"
   | "active"
-  | "closed";
+  | "closed"
+  | "archived";
 export type JobProfile = {
   id: number;
   title: string;
@@ -23,6 +24,9 @@ export type JobProfileCreate = {
   description: string;
   status: JobProfileStatus;
 };
+export type JobProfileUpdate = Partial<
+  JobProfileCreate
+>;
 export type CandidateCV = {
   id: number;
   original_name: string;
@@ -45,7 +49,13 @@ export type CandidateCVPagePreview = {
   char_count: number;
   text: string;
 };
-
+export type JobCandidateAssignment = {
+  id: number;
+  job_profile_id: number;
+  candidate_cv_id: number;
+  assigned_by_id: number;
+  created_at: string;
+};
 export type CandidateContactInformation = {
   email: string | null;
   phone: string | null;

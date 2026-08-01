@@ -1,11 +1,18 @@
 
-from sqlalchemy import select
+from sqlalchemy import (
+    delete,
+    select,
+)
 from sqlalchemy.orm import Session
 from backend.app.models.job_profile import (
     JobProfile,
 )
+from backend.app.models.job_candidate_assignment import (
+    JobCandidateAssignment,
+)
 from backend.app.schemas.job import (
     JobProfileCreate,
+    JobProfileUpdate,
 )
 class JobProfileNotFoundError(
     LookupError
@@ -58,3 +65,46 @@ def get_job_profile(
             "The requested job profile was not found."
         )
     return job_profile
+
+def update_job_profile(
+    database: Session,
+    job_id: int,
+    request: JobProfileUpdate,
+) -> JobProfile:
+    job_profile = get_job_profile(
+        database=database,
+        job_id=job_id,
+    )
+    update_values = request.model_dump(
+        exclude_unset=True
+    )
+    for field_name, value in (
+        update_values.items()
+    ):
+        setattr(
+            job_profile,
+            field_name,
+            value,
+        )
+    database.commit()
+    database.refresh(job_profile)
+    return job_profile
+def delete_job_profile(
+    database: Session,
+    job_id: int,
+) -> None:
+    job_profile = get_job_profile(
+        database=database,
+        job_id=job_id,
+    )
+    database.execute(
+        delete(
+            JobCandidateAssignment
+        ).where(
+            JobCandidateAssignment
+            .job_profile_id
+            == job_id
+        )
+    )
+    database.delete(job_profile)
+    database.commit()

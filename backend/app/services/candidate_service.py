@@ -3,12 +3,24 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import (
+    delete,
+    select,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.models.candidate_cv import (
     CandidateCV,
+)
+from backend.app.models.candidate_cv_page import (
+    CandidateCVPage,
+)
+from backend.app.models.candidate_profile import (
+    CandidateProfile,
+)
+from backend.app.models.job_candidate_assignment import (
+    JobCandidateAssignment,
 )
 READ_CHUNK_SIZE = 1024 * 1024
 ALLOWED_PDF_CONTENT_TYPES = {
@@ -257,3 +269,101 @@ def get_candidate_cv_file(
             "could not be found."
         )
     return candidate, candidate_path
+
+def delete_candidate_cv_permanently(
+    database: Session,
+    candidate_id: int,
+) -> None:
+    candidate = get_candidate_cv(
+        database=database,
+        candidate_id=candidate_id,
+    )
+    upload_directory = Path(
+        settings.candidate_upload_dir
+    ).resolve()
+    candidate_path = Path(
+        candidate.file_path
+    ).resolve()
+    try:
+        candidate_path.relative_to(
+            upload_directory
+        )
+    except ValueError as error:
+        raise CandidateCVFileNotFoundError(
+            "The candidate CV file path "
+            "is outside the secure upload directory."
+        ) from error
+    pending_delete_path: (
+        Path | None
+    ) = None
+    if (
+        candidate_path.exists()
+        and candidate_path.is_file()
+    ):
+        pending_delete_path = (
+            candidate_path.with_name(
+                (
+                    f"{candidate_path.name}."
+                    f"{uuid4().hex}.delete-pending"
+                )
+            )
+        )
+        candidate_path.replace(
+            pending_delete_path
+        )
+    try:
+        database.execute(
+            delete(
+                JobCandidateAssignment
+            ).where(
+                JobCandidateAssignment
+                .candidate_cv_id
+                == candidate_id
+            )
+        )
+        database.execute(
+            delete(
+                CandidateProfile
+            ).where(
+                CandidateProfile
+                .candidate_cv_id
+                == candidate_id
+            )
+        )
+        database.execute(
+            delete(
+                CandidateCVPage
+            ).where(
+                CandidateCVPage
+                .candidate_cv_id
+                == candidate_id
+            )
+        )
+        database.delete(candidate)
+        database.commit()
+    except Exception:
+        database.rollback()
+        if (
+            pending_delete_path
+            is not None
+            and pending_delete_path.exists()
+            and not candidate_path.exists()
+        ):
+            pending_delete_path.replace(
+                candidate_path
+            )
+        raise
+    if (
+        pending_delete_path is not None
+        and pending_delete_path.exists()
+    ):
+        try:
+            pending_delete_path.unlink()
+        except OSError as error:
+            print(
+                "[WARNING] Candidate record was "
+                "deleted but the pending file "
+                "could not be removed: "
+                f"{error}",
+                flush=True,
+            )
