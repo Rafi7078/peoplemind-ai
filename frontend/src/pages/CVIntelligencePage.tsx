@@ -15,7 +15,11 @@ import {
   CandidateProfilePanel,
 } from "../features/cv-intelligence/CandidateProfilePanel";
 import {
+  JobMatchResultPanel,
+} from "../features/cv-intelligence/JobMatchResultPanel";
+import {
   analyzeCandidateATS,
+  analyzeCandidateJobMatch,
   assignCandidateToJob,
   createJobProfile,
   deleteCandidatePermanently,
@@ -23,6 +27,7 @@ import {
   extractCandidateProfile,
   fetchCandidateCVFile,
   getCandidateATSResult,
+  getCandidateJobMatch,
   getCandidateProfile,
   listCandidateCVPages,
   listCandidateCVs,
@@ -39,6 +44,7 @@ import type {
   CandidateCV,
   CandidateCVPagePreview,
   CandidateProfile,
+  JobMatchResult,
   JobProfile,
   JobProfileCreate,
   JobProfileStatus,
@@ -52,6 +58,7 @@ type CandidateScope =
   | "unassigned"
   | `job:${number}`;
 type CandidateDetailView =
+  | "match"
   | "ats"
   | "profile"
   | "audit";
@@ -231,8 +238,18 @@ export function CVIntelligencePage() {
     CandidateATSResult | null
   >(null);
   const [
+    candidateJobMatch,
+    setCandidateJobMatch,
+  ] = useState<
+    JobMatchResult | null
+  >(null);
+  const [
     isAtsLoading,
     setIsAtsLoading,
+  ] = useState(false);
+  const [
+    isJobMatchLoading,
+    setIsJobMatchLoading,
   ] = useState(false);
   const [
     candidateDetailView,
@@ -498,12 +515,30 @@ export function CVIntelligencePage() {
           throw error;
         },
       ),
+      currentScopeJobId === null
+        ? Promise.resolve(null)
+        : getCandidateJobMatch(
+            currentScopeJobId,
+            selectedCandidateId,
+          ).catch(
+            (error: unknown) => {
+              if (
+                axios.isAxiosError(error)
+                && error.response?.status
+                === 404
+              ) {
+                return null;
+              }
+              throw error;
+            },
+          ),
     ])
       .then(
         ([
           pageResult,
           profileResult,
           atsResult,
+          jobMatchResult,
         ]) => {
           if (!isActive) {
             return;
@@ -516,6 +551,9 @@ export function CVIntelligencePage() {
           );
           setCandidateAtsResult(
             atsResult,
+          );
+          setCandidateJobMatch(
+            jobMatchResult,
           );
         },
       )
@@ -539,11 +577,15 @@ export function CVIntelligencePage() {
         setIsPageLoading(false);
         setIsProfileLoading(false);
         setIsAtsLoading(false);
+        setIsJobMatchLoading(false);
       });
     return () => {
       isActive = false;
     };
-  }, [selectedCandidateId]);
+  }, [
+    selectedCandidateId,
+    currentScopeJobId,
+  ]);
   function clearMessages(): void {
     setErrorMessage(null);
     setActivityMessage(null);
@@ -554,11 +596,17 @@ export function CVIntelligencePage() {
     setCandidatePages([]);
     setCandidateProfile(null);
     setCandidateAtsResult(null);
+    setCandidateJobMatch(null);
     setIsPageLoading(true);
     setIsProfileLoading(true);
     setIsAtsLoading(true);
+    setIsJobMatchLoading(
+      currentScopeJobId !== null,
+    );
     setCandidateDetailView(
-      "ats",
+      currentScopeJobId !== null
+        ? "match"
+        : "ats",
     );
     setSelectedCandidateId(
       candidateId,
@@ -603,9 +651,17 @@ export function CVIntelligencePage() {
     setCandidateScope(
       nextScope,
     );
+    setCandidateDetailView(
+      nextScope.startsWith(
+        "job:",
+      )
+        ? "match"
+        : "ats",
+    );
     setCandidatePages([]);
     setCandidateProfile(null);
     setCandidateAtsResult(null);
+    setCandidateJobMatch(null);
     setSelectedCandidateId(
       nextScope === "all"
         ? candidates[0]?.id
@@ -847,10 +903,14 @@ export function CVIntelligencePage() {
     setActiveSection(
       "candidates",
     );
+    setCandidateDetailView(
+      "match",
+    );
     setSelectedCandidateId(null);
     setCandidatePages([]);
     setCandidateProfile(null);
     setCandidateAtsResult(null);
+    setCandidateJobMatch(null);
   }
   async function handleUploadCandidate(
     event: FormEvent<HTMLFormElement>,
@@ -1002,6 +1062,7 @@ export function CVIntelligencePage() {
       setCandidatePages([]);
       setCandidateProfile(null);
       setCandidateAtsResult(null);
+      setCandidateJobMatch(null);
       setActivityMessage(
         "Candidate removed from this job. The CV was preserved.",
       );
@@ -1047,6 +1108,7 @@ export function CVIntelligencePage() {
       setCandidatePages([]);
       setCandidateProfile(null);
       setCandidateAtsResult(null);
+      setCandidateJobMatch(null);
       setActivityMessage(
         "Candidate CV and all related records were permanently deleted.",
       );
@@ -1059,6 +1121,50 @@ export function CVIntelligencePage() {
       );
     } finally {
       setBusyAction(null);
+    }
+  }
+  async function handleAnalyzeCandidateJobMatch(
+    candidate: CandidateCV,
+  ): Promise<void> {
+    if (
+      currentScopeJobId === null
+      || currentScopeJob === null
+    ) {
+      setErrorMessage(
+        "Open candidates from a specific job profile before running job-match analysis.",
+      );
+      return;
+    }
+    clearMessages();
+    setCandidateDetailView(
+      "match",
+    );
+    setBusyAction(
+      `job-match-${candidate.id}`,
+    );
+    setIsJobMatchLoading(true);
+    try {
+      const result =
+        await analyzeCandidateJobMatch(
+          currentScopeJobId,
+          candidate.id,
+        );
+      setCandidateJobMatch(
+        result,
+      );
+      setActivityMessage(
+        "Candidate-job match analysis completed. Review the evidence before making any recruitment decision.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not complete candidate-job match analysis.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+      setIsJobMatchLoading(false);
     }
   }
   async function handleAnalyzeCandidateATS(
@@ -1201,6 +1307,7 @@ export function CVIntelligencePage() {
       );
       setCandidateProfile(null);
       setCandidateAtsResult(null);
+      setCandidateJobMatch(null);
       if (
         result.status
         === "needs_ocr"
@@ -1244,6 +1351,7 @@ export function CVIntelligencePage() {
       setCandidateProfile(
         profile,
       );
+      setCandidateJobMatch(null);
       setActivityMessage(
         "Structured candidate profile extracted successfully. " +
         "Verify the result against the original CV.",
@@ -1937,6 +2045,38 @@ export function CVIntelligencePage() {
                           ? "Re-run ATS analysis"
                           : "Run ATS analysis"}
                     </button>
+                    {currentScopeJobId
+                    !== null ? (
+                      <button
+                        className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={
+                          busyAction !== null
+                          || selectedCandidate.status
+                          !== "ready"
+                          || candidateProfile
+                          === null
+                        }
+                        onClick={() => {
+                          void handleAnalyzeCandidateJobMatch(
+                            selectedCandidate,
+                          );
+                        }}
+                        title={
+                          candidateProfile
+                          === null
+                            ? "Extract the structured profile first."
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        {busyAction
+                        === `job-match-${selectedCandidate.id}`
+                          ? "Matching..."
+                          : candidateJobMatch
+                            ? "Re-run job match"
+                            : "Run job match"}
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="font-semibold text-slate-900">
@@ -2003,7 +2143,39 @@ export function CVIntelligencePage() {
                     </div>
                   </div>
                   <section className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div
+                      className={[
+                        "grid gap-2",
+                        currentScopeJobId
+                        !== null
+                          ? "sm:grid-cols-2 xl:grid-cols-4"
+                          : "sm:grid-cols-3",
+                      ].join(" ")}
+                    >
+                      {currentScopeJobId
+                      !== null ? (
+                        <button
+                          aria-pressed={
+                            candidateDetailView
+                            === "match"
+                          }
+                          className={[
+                            "rounded-xl px-4 py-3 text-sm font-semibold transition",
+                            candidateDetailView
+                            === "match"
+                              ? "bg-slate-950 text-white shadow-sm"
+                              : "bg-white text-slate-600 hover:bg-slate-100",
+                          ].join(" ")}
+                          onClick={() => {
+                            setCandidateDetailView(
+                              "match",
+                            );
+                          }}
+                          type="button"
+                        >
+                          Job Match
+                        </button>
+                      ) : null}
                       {(
                         [
                           {
@@ -2045,6 +2217,22 @@ export function CVIntelligencePage() {
                       ))}
                     </div>
                   </section>
+                  {candidateDetailView
+                  === "match"
+                  && currentScopeJob
+                  !== null ? (
+                    <JobMatchResultPanel
+                      isLoading={
+                        isJobMatchLoading
+                      }
+                      jobTitle={
+                        currentScopeJob.title
+                      }
+                      result={
+                        candidateJobMatch
+                      }
+                    />
+                  ) : null}
                   {candidateDetailView
                   === "ats" ? (
                     <ATSResultPanel

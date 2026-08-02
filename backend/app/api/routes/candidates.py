@@ -45,6 +45,7 @@ from backend.app.services.job_candidate_assignment_service import (
 from backend.app.services import (
     candidate_ats_service,
     candidate_profile_service,
+    job_match_service,
 )
 router = APIRouter(
     prefix="/api/candidates",
@@ -200,6 +201,10 @@ def process_candidate(
             database=database,
             candidate_id=candidate_id,
         )
+        job_match_service.invalidate_job_matches_for_candidate(
+            database=database,
+            candidate_id=candidate_id,
+        )
     except CandidateCVNotFoundError as error:
         raise HTTPException(
             status_code=(
@@ -268,6 +273,10 @@ def extract_structured_candidate_profile(
                 database=database,
                 candidate_id=candidate_id,
             )
+        )
+        job_match_service.invalidate_job_matches_for_candidate(
+            database=database,
+            candidate_id=candidate_id,
         )
     except CandidateCVNotFoundError as error:
         raise HTTPException(

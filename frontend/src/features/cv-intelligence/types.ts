@@ -139,3 +139,47 @@ export type CandidateATSResult = {
   created_at: string;
   updated_at: string;
 };
+
+export type JobMatchCheckStatus =
+  | "match"
+  | "partial"
+  | "missing"
+  | "not_specified";
+export type JobMatchCheck = {
+  check_id: string;
+  category: string;
+  title: string;
+  status: JobMatchCheckStatus;
+  points_awarded: number;
+  max_points: number;
+  message: string;
+  evidence: string[];
+};
+export type JobMatchResult = {
+  id: number;
+  job_profile_id: number;
+  candidate_cv_id: number;
+  score: number;
+  rating: string;
+  recommendation: string;
+  category_scores: Record<
+    string,
+    number
+  >;
+  requirements: {
+    recognized_job_skills?: string[];
+    minimum_experience_years?:
+      number | null;
+    education_requirement?:
+      string | null;
+    job_role_groups?: string[];
+    [key: string]: unknown;
+  };
+  checks: JobMatchCheck[];
+  matched_requirements: string[];
+  missing_requirements: string[];
+  notes: string[];
+  engine_version: string;
+  created_at: string;
+  updated_at: string;
+};
