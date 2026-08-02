@@ -18,6 +18,9 @@ import {
   JobMatchResultPanel,
 } from "../features/cv-intelligence/JobMatchResultPanel";
 import {
+  JobRankingDashboard,
+} from "../features/cv-intelligence/JobRankingDashboard";
+import {
   analyzeCandidateATS,
   analyzeCandidateJobMatch,
   assignCandidateToJob,
@@ -52,6 +55,7 @@ import type {
 type ActiveSection =
   | "overview"
   | "jobs"
+  | "ranking"
   | "candidates";
 type CandidateScope =
   | "all"
@@ -300,6 +304,12 @@ export function CVIntelligencePage() {
     null,
   );
   const [
+    selectedRankingJobId,
+    setSelectedRankingJobId,
+  ] = useState<number | null>(
+    null,
+  );
+  const [
     selectedFile,
     setSelectedFile,
   ] = useState<File | null>(
@@ -455,8 +465,18 @@ export function CVIntelligencePage() {
           result,
         );
         setSelectedCandidateId(
-          result[0]?.id
-          ?? null,
+          (current) =>
+            current !== null
+            && result.some(
+              (candidate) =>
+                candidate.id
+                === current,
+            )
+              ? current
+              : (
+                  result[0]?.id
+                  ?? null
+                ),
         );
       })
       .catch(
@@ -871,6 +891,14 @@ export function CVIntelligencePage() {
           ),
       );
       if (
+        selectedRankingJobId
+        === job.id
+      ) {
+        setSelectedRankingJobId(
+          null,
+        );
+      }
+      if (
         currentScopeJobId
         === job.id
       ) {
@@ -892,6 +920,43 @@ export function CVIntelligencePage() {
     } finally {
       setBusyAction(null);
     }
+  }
+  function openJobRanking(
+    job: JobProfile,
+  ): void {
+    clearMessages();
+    setSelectedRankingJobId(
+      job.id,
+    );
+    setActiveSection(
+      "ranking",
+    );
+  }
+  function openRankedCandidate(
+    jobId: number,
+    candidateId: number,
+  ): void {
+    clearMessages();
+    setCandidateScope(
+      `job:${jobId}`,
+    );
+    setActiveSection(
+      "candidates",
+    );
+    setCandidateDetailView(
+      "match",
+    );
+    setCandidatePages([]);
+    setCandidateProfile(null);
+    setCandidateAtsResult(null);
+    setCandidateJobMatch(null);
+    setIsPageLoading(true);
+    setIsProfileLoading(true);
+    setIsAtsLoading(true);
+    setIsJobMatchLoading(true);
+    setSelectedCandidateId(
+      candidateId,
+    );
   }
   function openJobCandidates(
     job: JobProfile,
@@ -1417,6 +1482,10 @@ export function CVIntelligencePage() {
               label: "Job Profiles",
             },
             {
+              key: "ranking",
+              label: "Ranking & Review",
+            },
+            {
               key: "candidates",
               label: "Candidate CVs",
             },
@@ -1432,6 +1501,17 @@ export function CVIntelligencePage() {
             ].join(" ")}
             key={section.key}
             onClick={() => {
+              if (
+                section.key
+                === "ranking"
+                && selectedRankingJobId
+                === null
+              ) {
+                setSelectedRankingJobId(
+                  jobProfiles[0]?.id
+                  ?? null,
+                );
+              }
               setActiveSection(
                 section.key,
               );
@@ -1735,6 +1815,17 @@ export function CVIntelligencePage() {
                         View candidates
                       </button>
                       <button
+                        className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white"
+                        onClick={() => {
+                          openJobRanking(
+                            job,
+                          );
+                        }}
+                        type="button"
+                      >
+                        Ranking & review
+                      </button>
+                      <button
                         className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
                         onClick={() => {
                           beginJobEdit(job);
@@ -1775,6 +1866,23 @@ export function CVIntelligencePage() {
             </div>
           </article>
         </section>
+      ) : null}
+      {activeSection === "ranking" ? (
+        <JobRankingDashboard
+          initialJobId={
+            selectedRankingJobId
+          }
+          jobs={
+            jobProfiles
+          }
+          key={
+            selectedRankingJobId
+            ?? "default-ranking"
+          }
+          onOpenCandidate={
+            openRankedCandidate
+          }
+        />
       ) : null}
       {activeSection === "candidates" ? (
         <section className="mt-8">

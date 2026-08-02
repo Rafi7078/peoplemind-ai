@@ -22,6 +22,11 @@ from backend.app.schemas.job_candidate_assignment import (
 from backend.app.schemas.job_match import (
     JobMatchRead,
 )
+from backend.app.schemas.job_candidate_review import (
+    JobCandidateRankingItem,
+    JobCandidateReviewRead,
+    JobCandidateReviewUpdate,
+)
 from backend.app.services.job_profile_service import (
     JobProfileNotFoundError,
     create_job_profile,
@@ -41,6 +46,7 @@ from backend.app.services.job_candidate_assignment_service import (
     remove_candidate_from_job,
 )
 from backend.app.services import (
+    job_candidate_review_service,
     job_match_service,
 )
 router = APIRouter(
@@ -214,6 +220,134 @@ def read_job_match_ranking(
         )
         for result in results
     ]
+
+@router.get(
+    "/{job_id}/ranking",
+    response_model=list[
+        JobCandidateRankingItem
+    ],
+    summary=(
+        "List all assigned candidates "
+        "in job-match ranking order"
+    ),
+)
+def read_job_candidate_ranking(
+    job_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> list[JobCandidateRankingItem]:
+    try:
+        ranking_items = (
+            job_candidate_review_service
+            .list_job_candidate_ranking(
+                database=database,
+                job_id=job_id,
+            )
+        )
+    except JobProfileNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    return [
+        JobCandidateRankingItem
+        .model_validate(item)
+        for item in ranking_items
+    ]
+@router.get(
+    (
+        "/{job_id}/candidates/"
+        "{candidate_id}/review"
+    ),
+    response_model=(
+        JobCandidateReviewRead
+    ),
+    summary=(
+        "Read the HR review for a "
+        "job candidate"
+    ),
+)
+def read_job_candidate_review(
+    job_id: int,
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> JobCandidateReviewRead:
+    try:
+        review = (
+            job_candidate_review_service
+            .get_job_candidate_review(
+                database=database,
+                job_id=job_id,
+                candidate_id=candidate_id,
+            )
+        )
+    except (
+        JobProfileNotFoundError,
+        CandidateCVNotFoundError,
+        CandidateAssignmentNotFoundError,
+        job_candidate_review_service
+        .JobCandidateReviewNotFoundError,
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    return (
+        JobCandidateReviewRead
+        .model_validate(review)
+    )
+@router.patch(
+    (
+        "/{job_id}/candidates/"
+        "{candidate_id}/review"
+    ),
+    response_model=(
+        JobCandidateReviewRead
+    ),
+    summary=(
+        "Save or update a human HR review"
+    ),
+)
+def update_job_candidate_review(
+    job_id: int,
+    candidate_id: int,
+    request: JobCandidateReviewUpdate,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> JobCandidateReviewRead:
+    try:
+        review = (
+            job_candidate_review_service
+            .upsert_job_candidate_review(
+                database=database,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                request=request,
+                reviewed_by_id=(
+                    current_user.id
+                ),
+            )
+        )
+    except (
+        JobProfileNotFoundError,
+        CandidateCVNotFoundError,
+        CandidateAssignmentNotFoundError,
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    return (
+        JobCandidateReviewRead
+        .model_validate(review)
+    )
 @router.get(
     "/{job_id}",
     response_model=JobProfileRead,
@@ -290,6 +424,10 @@ def delete_job(
             database=database,
             job_id=job_id,
         )
+        job_candidate_review_service.delete_job_candidate_reviews_for_job(
+            database=database,
+            job_id=job_id,
+        )
     except JobProfileNotFoundError as error:
         raise HTTPException(
             status_code=(
@@ -363,6 +501,11 @@ def remove_candidate(
             candidate_id=candidate_id,
         )
         job_match_service.invalidate_job_match_pair(
+            database=database,
+            job_id=job_id,
+            candidate_id=candidate_id,
+        )
+        job_candidate_review_service.delete_job_candidate_review_pair(
             database=database,
             job_id=job_id,
             candidate_id=candidate_id,

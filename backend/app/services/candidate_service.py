@@ -28,6 +28,9 @@ from backend.app.models.job_candidate_assignment import (
 from backend.app.models.job_match_result import (
     JobMatchResult,
 )
+from backend.app.models.job_candidate_review import (
+    JobCandidateReview,
+)
 READ_CHUNK_SIZE = 1024 * 1024
 ALLOWED_PDF_CONTENT_TYPES = {
     "application/pdf",
@@ -318,6 +321,15 @@ def delete_candidate_cv_permanently(
             pending_delete_path
         )
     try:
+        database.execute(
+            delete(
+                JobCandidateReview
+            ).where(
+                JobCandidateReview
+                .candidate_cv_id
+                == candidate_id
+            )
+        )
         database.execute(
             delete(
                 JobMatchResult

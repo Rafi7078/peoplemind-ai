@@ -183,3 +183,45 @@ export type JobMatchResult = {
   created_at: string;
   updated_at: string;
 };
+
+export type JobReviewStatus =
+  | "not_reviewed"
+  | "in_review"
+  | "shortlisted"
+  | "on_hold"
+  | "not_selected";
+export type JobCandidateReview = {
+  id: number;
+  job_profile_id: number;
+  candidate_cv_id: number;
+  status: JobReviewStatus;
+  notes: string | null;
+  reviewed_by_id: number;
+  reviewed_at: string;
+  created_at: string;
+  updated_at: string;
+};
+export type JobCandidateReviewUpdate = {
+  status: JobReviewStatus;
+  notes: string | null;
+};
+export type JobMatchRankingSummary = {
+  score: number;
+  rating: string;
+  recommendation: string;
+  engine_version: string;
+  updated_at: string;
+};
+export type JobCandidateRankingItem = {
+  rank: number | null;
+  analysis_status:
+    | "analyzed"
+    | "not_analyzed";
+  candidate: CandidateCV;
+  candidate_name: string | null;
+  match: JobMatchRankingSummary | null;
+  ats_score: number | null;
+  ats_rating: string | null;
+  review_status: JobReviewStatus;
+  review: JobCandidateReview | null;
+};

@@ -7,6 +7,9 @@ import type {
   CandidateCVProcessResult,
   CandidateProfile,
   JobCandidateAssignment,
+  JobCandidateRankingItem,
+  JobCandidateReview,
+  JobCandidateReviewUpdate,
   JobMatchResult,
   JobProfile,
   JobProfileCreate,
@@ -215,6 +218,32 @@ export async function listJobMatchResults(
   const response =
     await apiClient.get<JobMatchResult[]>(
       `/api/jobs/${jobId}/matches`,
+    );
+  return response.data;
+}
+
+export async function listJobCandidateRanking(
+  jobId: number,
+): Promise<JobCandidateRankingItem[]> {
+  const response =
+    await apiClient.get<
+      JobCandidateRankingItem[]
+    >(
+      `/api/jobs/${jobId}/ranking`,
+    );
+  return response.data;
+}
+export async function updateJobCandidateReview(
+  jobId: number,
+  candidateId: number,
+  payload: JobCandidateReviewUpdate,
+): Promise<JobCandidateReview> {
+  const response =
+    await apiClient.patch<
+      JobCandidateReview
+    >(
+      `/api/jobs/${jobId}/candidates/${candidateId}/review`,
+      payload,
     );
   return response.data;
 }
