@@ -19,6 +19,9 @@ from backend.app.models.candidate_cv_page import (
 from backend.app.models.candidate_profile import (
     CandidateProfile,
 )
+from backend.app.models.candidate_ats_result import (
+    CandidateATSResult,
+)
 from backend.app.models.job_candidate_assignment import (
     JobCandidateAssignment,
 )
@@ -317,6 +320,15 @@ def delete_candidate_cv_permanently(
                 JobCandidateAssignment
             ).where(
                 JobCandidateAssignment
+                .candidate_cv_id
+                == candidate_id
+            )
+        )
+        database.execute(
+            delete(
+                CandidateATSResult
+            ).where(
+                CandidateATSResult
                 .candidate_cv_id
                 == candidate_id
             )

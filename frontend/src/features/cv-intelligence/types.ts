@@ -108,3 +108,34 @@ export type CandidateProfile = {
   created_at: string;
   updated_at: string;
 };
+
+export type CandidateATSCheckStatus =
+  | "pass"
+  | "warning"
+  | "fail";
+export type CandidateATSCheck = {
+  check_id: string;
+  category: string;
+  title: string;
+  status: CandidateATSCheckStatus;
+  points_awarded: number;
+  max_points: number;
+  message: string;
+  evidence: string[];
+};
+export type CandidateATSResult = {
+  id: number;
+  candidate_cv_id: number;
+  score: number;
+  rating: string;
+  risk_level: string;
+  category_scores: Record<
+    string,
+    number
+  >;
+  checks: CandidateATSCheck[];
+  suggestions: string[];
+  engine_version: string;
+  created_at: string;
+  updated_at: string;
+};

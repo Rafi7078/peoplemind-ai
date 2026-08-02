@@ -1,6 +1,7 @@
 
 import { apiClient } from "../../api/client";
 import type {
+  CandidateATSResult,
   CandidateCV,
   CandidateCVPagePreview,
   CandidateCVProcessResult,
@@ -164,6 +165,25 @@ export async function getCandidateProfile(
   const response =
     await apiClient.get<CandidateProfile>(
       `/api/candidates/${candidateId}/profile`,
+    );
+  return response.data;
+}
+
+export async function analyzeCandidateATS(
+  candidateId: number,
+): Promise<CandidateATSResult> {
+  const response =
+    await apiClient.post<CandidateATSResult>(
+      `/api/candidates/${candidateId}/ats/analyze`,
+    );
+  return response.data;
+}
+export async function getCandidateATSResult(
+  candidateId: number,
+): Promise<CandidateATSResult> {
+  const response =
+    await apiClient.get<CandidateATSResult>(
+      `/api/candidates/${candidateId}/ats`,
     );
   return response.data;
 }

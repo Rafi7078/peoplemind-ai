@@ -18,6 +18,9 @@ from backend.app.schemas.candidate import (
     CandidateCVProcessResult,
     CandidateCVRead,
 )
+from backend.app.schemas.candidate_ats import (
+    CandidateATSRead,
+)
 from backend.app.schemas.candidate_profile import (
     CandidateProfileRead,
 )
@@ -40,6 +43,7 @@ from backend.app.services.job_candidate_assignment_service import (
     list_unassigned_candidates,
 )
 from backend.app.services import (
+    candidate_ats_service,
     candidate_profile_service,
 )
 router = APIRouter(
@@ -334,6 +338,83 @@ def read_structured_candidate_profile(
         profile
     )
 
+
+@router.post(
+    "/{candidate_id}/ats/analyze",
+    response_model=CandidateATSRead,
+    summary="Run ATS compatibility analysis",
+)
+def analyze_candidate_ats_result(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> CandidateATSRead:
+    try:
+        result = (
+            candidate_ats_service
+            .analyze_candidate_ats(
+                database=database,
+                candidate_id=candidate_id,
+            )
+        )
+    except CandidateCVNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    except (
+        candidate_ats_service
+        .CandidateATSPrerequisiteError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error
+    return CandidateATSRead.model_validate(
+        result
+    )
+@router.get(
+    "/{candidate_id}/ats",
+    response_model=CandidateATSRead,
+    summary="Read ATS compatibility result",
+)
+def read_candidate_ats_result(
+    candidate_id: int,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+) -> CandidateATSRead:
+    try:
+        result = (
+            candidate_ats_service
+            .get_candidate_ats_result(
+                database=database,
+                candidate_id=candidate_id,
+            )
+        )
+    except CandidateCVNotFoundError as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    except (
+        candidate_ats_service
+        .CandidateATSNotFoundError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    return CandidateATSRead.model_validate(
+        result
+    )
 @router.delete(
     "/{candidate_id}",
     status_code=status.HTTP_204_NO_CONTENT,

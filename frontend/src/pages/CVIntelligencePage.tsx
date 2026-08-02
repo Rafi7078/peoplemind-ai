@@ -9,15 +9,20 @@ import type {
   FormEvent,
 } from "react";
 import {
+  ATSResultPanel,
+} from "../features/cv-intelligence/ATSResultPanel";
+import {
   CandidateProfilePanel,
 } from "../features/cv-intelligence/CandidateProfilePanel";
 import {
+  analyzeCandidateATS,
   assignCandidateToJob,
   createJobProfile,
   deleteCandidatePermanently,
   deleteJobProfile,
   extractCandidateProfile,
   fetchCandidateCVFile,
+  getCandidateATSResult,
   getCandidateProfile,
   listCandidateCVPages,
   listCandidateCVs,
@@ -30,6 +35,7 @@ import {
   uploadCandidateCV,
 } from "../features/cv-intelligence/api";
 import type {
+  CandidateATSResult,
   CandidateCV,
   CandidateCVPagePreview,
   CandidateProfile,
@@ -45,6 +51,10 @@ type CandidateScope =
   | "all"
   | "unassigned"
   | `job:${number}`;
+type CandidateDetailView =
+  | "ats"
+  | "profile"
+  | "audit";
 const emptyJobForm: JobProfileCreate = {
   title: "",
   department: null,
@@ -214,6 +224,22 @@ export function CVIntelligencePage() {
   ] = useState<
     CandidateProfile | null
   >(null);
+  const [
+    candidateAtsResult,
+    setCandidateAtsResult,
+  ] = useState<
+    CandidateATSResult | null
+  >(null);
+  const [
+    isAtsLoading,
+    setIsAtsLoading,
+  ] = useState(false);
+  const [
+    candidateDetailView,
+    setCandidateDetailView,
+  ] = useState<CandidateDetailView>(
+    "ats",
+  );
   const [
     isProfileLoading,
     setIsProfileLoading,
@@ -458,11 +484,26 @@ export function CVIntelligencePage() {
           throw error;
         },
       ),
+      getCandidateATSResult(
+        selectedCandidateId,
+      ).catch(
+        (error: unknown) => {
+          if (
+            axios.isAxiosError(error)
+            && error.response?.status
+            === 404
+          ) {
+            return null;
+          }
+          throw error;
+        },
+      ),
     ])
       .then(
         ([
           pageResult,
           profileResult,
+          atsResult,
         ]) => {
           if (!isActive) {
             return;
@@ -472,6 +513,9 @@ export function CVIntelligencePage() {
           );
           setCandidateProfile(
             profileResult,
+          );
+          setCandidateAtsResult(
+            atsResult,
           );
         },
       )
@@ -494,6 +538,7 @@ export function CVIntelligencePage() {
         }
         setIsPageLoading(false);
         setIsProfileLoading(false);
+        setIsAtsLoading(false);
       });
     return () => {
       isActive = false;
@@ -508,8 +553,13 @@ export function CVIntelligencePage() {
   ): void {
     setCandidatePages([]);
     setCandidateProfile(null);
+    setCandidateAtsResult(null);
     setIsPageLoading(true);
     setIsProfileLoading(true);
+    setIsAtsLoading(true);
+    setCandidateDetailView(
+      "ats",
+    );
     setSelectedCandidateId(
       candidateId,
     );
@@ -555,6 +605,7 @@ export function CVIntelligencePage() {
     );
     setCandidatePages([]);
     setCandidateProfile(null);
+    setCandidateAtsResult(null);
     setSelectedCandidateId(
       nextScope === "all"
         ? candidates[0]?.id
@@ -799,6 +850,7 @@ export function CVIntelligencePage() {
     setSelectedCandidateId(null);
     setCandidatePages([]);
     setCandidateProfile(null);
+    setCandidateAtsResult(null);
   }
   async function handleUploadCandidate(
     event: FormEvent<HTMLFormElement>,
@@ -949,6 +1001,7 @@ export function CVIntelligencePage() {
       setSelectedCandidateId(null);
       setCandidatePages([]);
       setCandidateProfile(null);
+      setCandidateAtsResult(null);
       setActivityMessage(
         "Candidate removed from this job. The CV was preserved.",
       );
@@ -993,6 +1046,7 @@ export function CVIntelligencePage() {
       setSelectedCandidateId(null);
       setCandidatePages([]);
       setCandidateProfile(null);
+      setCandidateAtsResult(null);
       setActivityMessage(
         "Candidate CV and all related records were permanently deleted.",
       );
@@ -1005,6 +1059,41 @@ export function CVIntelligencePage() {
       );
     } finally {
       setBusyAction(null);
+    }
+  }
+  async function handleAnalyzeCandidateATS(
+    candidate: CandidateCV,
+  ): Promise<void> {
+    clearMessages();
+    setCandidateDetailView(
+      "ats",
+    );
+    setBusyAction(
+      `ats-${candidate.id}`,
+    );
+    setIsAtsLoading(true);
+    try {
+      const result =
+        await analyzeCandidateATS(
+          candidate.id,
+        );
+      setCandidateAtsResult(
+        result,
+      );
+      setActivityMessage(
+        "ATS compatibility analysis completed. " +
+        "Review the score, evidence and suggestions before making any decision.",
+      );
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not complete ATS compatibility analysis.",
+        ),
+      );
+    } finally {
+      setBusyAction(null);
+      setIsAtsLoading(false);
     }
   }
   async function handleOpenOriginalCV(
@@ -1065,6 +1154,9 @@ export function CVIntelligencePage() {
     candidate: CandidateCV,
   ): Promise<void> {
     clearMessages();
+    setCandidateDetailView(
+      "audit",
+    );
     setBusyAction(
       `process-${candidate.id}`,
     );
@@ -1108,6 +1200,7 @@ export function CVIntelligencePage() {
         pages,
       );
       setCandidateProfile(null);
+      setCandidateAtsResult(null);
       if (
         result.status
         === "needs_ocr"
@@ -1136,6 +1229,9 @@ export function CVIntelligencePage() {
     candidate: CandidateCV,
   ): Promise<void> {
     clearMessages();
+    setCandidateDetailView(
+      "profile",
+    );
     setBusyAction(
       `profile-${candidate.id}`,
     );
@@ -1498,7 +1594,7 @@ export function CVIntelligencePage() {
                             job.employment_type,
                           ]
                             .filter(Boolean)
-                            .join(" ? ")
+                            .join(" | ")
                             || "Additional details not provided"}
                         </p>
                       </div>
@@ -1713,7 +1809,7 @@ export function CVIntelligencePage() {
                               {formatBytes(
                                 candidate.size_bytes,
                               )}
-                              {" ? "}
+                              {" | "}
                               {formatDate(
                                 candidate.created_at,
                               )}
@@ -1757,7 +1853,7 @@ export function CVIntelligencePage() {
                         {formatBytes(
                           selectedCandidate.size_bytes,
                         )}
-                        {" ? "}
+                        {" | "}
                         {selectedCandidate.page_count
                         !== null
                           ? `${selectedCandidate.page_count} page(s)`
@@ -1819,6 +1915,27 @@ export function CVIntelligencePage() {
                       {candidateProfile
                         ? "Re-extract structured profile"
                         : "Extract structured profile"}
+                    </button>
+                    <button
+                      className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={
+                        busyAction !== null
+                        || selectedCandidate.status
+                        !== "ready"
+                      }
+                      onClick={() => {
+                        void handleAnalyzeCandidateATS(
+                          selectedCandidate,
+                        );
+                      }}
+                      type="button"
+                    >
+                      {busyAction
+                      === `ats-${selectedCandidate.id}`
+                        ? "Analyzing ATS..."
+                        : candidateAtsResult
+                          ? "Re-run ATS analysis"
+                          : "Run ATS analysis"}
                     </button>
                   </div>
                   <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1885,54 +2002,131 @@ export function CVIntelligencePage() {
                       </button>
                     </div>
                   </div>
-                  <CandidateProfilePanel
-                    isLoading={
-                      isProfileLoading
-                    }
-                    profile={
-                      candidateProfile
-                    }
-                  />
-                  <details className="mt-7 border-t border-slate-200 pt-6">
-                    <summary className="cursor-pointer rounded-xl bg-slate-100 px-4 py-3 font-semibold text-slate-800">
-                      Show extraction audit (raw text)
-                    </summary>
-                    {isPageLoading ? (
-                      <p className="mt-5 text-sm text-slate-500">
-                        Loading extracted pages...
-                      </p>
-                    ) : null}
-                    {!isPageLoading
-                    && candidatePages.length
-                    === 0 ? (
-                      <p className="mt-5 text-sm text-slate-500">
-                        No extracted page text is available.
-                      </p>
-                    ) : null}
-                    <div className="mt-5 space-y-4">
-                      {candidatePages.map(
-                        (page) => (
-                          <article
-                            className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
-                            key={page.page_number}
-                          >
-                            <div className="flex justify-between gap-4">
-                              <h4 className="font-bold text-slate-800">
-                                Page {page.page_number}
-                              </h4>
-                              <span className="text-xs text-slate-500">
-                                {page.char_count} characters
-                              </span>
-                            </div>
-                            <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-600">
-                              {page.text
-                              || "No selectable text found."}
-                            </pre>
-                          </article>
-                        ),
-                      )}
+                  <section className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {(
+                        [
+                          {
+                            key: "ats",
+                            label: "ATS Analysis",
+                          },
+                          {
+                            key: "profile",
+                            label: "Structured Profile",
+                          },
+                          {
+                            key: "audit",
+                            label: "Raw Text Audit",
+                          },
+                        ] as const
+                      ).map((tab) => (
+                        <button
+                          aria-pressed={
+                            candidateDetailView
+                            === tab.key
+                          }
+                          className={[
+                            "rounded-xl px-4 py-3 text-sm font-semibold transition",
+                            candidateDetailView
+                            === tab.key
+                              ? "bg-slate-950 text-white shadow-sm"
+                              : "bg-white text-slate-600 hover:bg-slate-100",
+                          ].join(" ")}
+                          key={tab.key}
+                          onClick={() => {
+                            setCandidateDetailView(
+                              tab.key,
+                            );
+                          }}
+                          type="button"
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
-                  </details>
+                  </section>
+                  {candidateDetailView
+                  === "ats" ? (
+                    <ATSResultPanel
+                      isLoading={
+                        isAtsLoading
+                      }
+                      result={
+                        candidateAtsResult
+                      }
+                    />
+                  ) : null}
+                  {candidateDetailView
+                  === "profile" ? (
+                    <CandidateProfilePanel
+                      isLoading={
+                        isProfileLoading
+                      }
+                      profile={
+                        candidateProfile
+                      }
+                    />
+                  ) : null}
+                  {candidateDetailView
+                  === "audit" ? (
+                    <section className="mt-7 rounded-3xl border border-slate-200 bg-white p-6">
+                      <div>
+                        <p className="text-sm font-semibold uppercase tracking-wide text-sky-600">
+                          Extraction audit
+                        </p>
+                        <h3 className="mt-2 text-xl font-bold text-slate-950">
+                          Raw Extracted CV Text
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-500">
+                          This text was extracted from
+                          the original PDF and is used
+                          as evidence for profile and
+                          ATS analysis.
+                        </p>
+                      </div>
+                      {isPageLoading ? (
+                        <p className="mt-5 text-sm text-slate-500">
+                          Loading extracted pages...
+                        </p>
+                      ) : null}
+                      {!isPageLoading
+                      && candidatePages.length
+                      === 0 ? (
+                        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-7 text-center text-sm text-slate-500">
+                          No extracted page text is
+                          available. Process the CV
+                          first.
+                        </div>
+                      ) : null}
+                      <div className="mt-5 space-y-4">
+                        {candidatePages.map(
+                          (page) => (
+                            <article
+                              className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                              key={
+                                page.page_number
+                              }
+                            >
+                              <div className="flex justify-between gap-4">
+                                <h4 className="font-bold text-slate-800">
+                                  Page{" "}
+                                  {page.page_number}
+                                </h4>
+                                <span className="text-xs text-slate-500">
+                                  {page.char_count}
+                                  {" "}characters
+                                </span>
+                              </div>
+                              <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-slate-600">
+                                {page.text
+                                || "No selectable text found."}
+                              </pre>
+                            </article>
+                          ),
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
                 </>
               )}
             </article>
