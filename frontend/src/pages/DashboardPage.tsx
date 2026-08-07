@@ -24,11 +24,11 @@ const modules = [
   {
     title: "Attendance Management",
     description:
-      "Manage attendance records, leave status and basic summaries.",
-    status: "Planned",
+      "Manage dynamic teams, shifts and employees before recording team-wise attendance.",
+    status: "Available",
     statusClass:
-      "bg-amber-100 text-amber-700",
-    href: null,
+      "bg-emerald-100 text-emerald-700",
+    href: "/attendance",
   },
   {
     title: "Email Assistant",

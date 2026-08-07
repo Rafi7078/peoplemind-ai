@@ -9,6 +9,9 @@ from backend.app.api.routes.candidates import (
 from backend.app.api.routes.jobs import (
     router as jobs_router,
 )
+from backend.app.api.routes.attendance import (
+    router as attendance_router,
+)
 from backend.app.api.routes.documents import (
     router as documents_router,
 )
@@ -37,6 +40,15 @@ from backend.app.models.job_match_result import (  # noqa: F401
 )
 from backend.app.models.job_candidate_review import (  # noqa: F401
     JobCandidateReview,
+)
+from backend.app.models.attendance_team import (  # noqa: F401
+    AttendanceTeam,
+)
+from backend.app.models.attendance_shift import (  # noqa: F401
+    AttendanceShift,
+)
+from backend.app.models.attendance_employee import (  # noqa: F401
+    AttendanceEmployee,
 )
 from backend.app.models.document import Document  # noqa: F401
 from backend.app.models.document_chunk import (  # noqa: F401
@@ -81,6 +93,7 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(jobs_router)
 app.include_router(candidates_router)
+app.include_router(attendance_router)
 @app.get("/")
 def root() -> dict[str, str]:
     return {

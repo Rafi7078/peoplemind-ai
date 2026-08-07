@@ -6,6 +6,7 @@ import {
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
+import { AttendanceManagementPage } from "./pages/AttendanceManagementPage";
 import { CVIntelligencePage } from "./pages/CVIntelligencePage";
 import { DocumentAssistantPage } from "./pages/DocumentAssistantPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -33,6 +34,12 @@ function App() {
               <CVIntelligencePage />
             }
             path="cv-intelligence"
+          />
+          <Route
+            element={
+              <AttendanceManagementPage />
+            }
+            path="attendance"
           />
         </Route>
       </Route>
