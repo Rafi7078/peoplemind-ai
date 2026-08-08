@@ -66,3 +66,70 @@ export type AttendanceEmployeeCreate = {
 };
 export type AttendanceEmployeeUpdate =
   Partial<AttendanceEmployeeCreate>;
+
+
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "on_leave"
+  | "weekly_holiday";
+export type DailyRosterItem = {
+  employee_id: number;
+  employee_code: string;
+  full_name: string;
+  designation: string;
+  team_id: number;
+  shift_id: number;
+  weekly_holidays: string[];
+  suggested_status: AttendanceStatus;
+  saved_status: AttendanceStatus | null;
+  note: string | null;
+  record_id: number | null;
+};
+export type DailyAttendanceRoster = {
+  attendance_date: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+  total_members: number;
+  items: DailyRosterItem[];
+};
+export type DailyAttendanceEntry = {
+  employee_id: number;
+  status: AttendanceStatus;
+  note: string | null;
+};
+export type DailyAttendanceSubmit = {
+  attendance_date: string;
+  team_id: number;
+  shift_id: number;
+  entries: DailyAttendanceEntry[];
+};
+export type DailyAttendanceSummary = {
+  total_members: number;
+  present: number;
+  absent: number;
+  on_leave: number;
+  weekly_holiday: number;
+};
+export type DailyAttendanceSubmission = {
+  attendance_date: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+  summary: DailyAttendanceSummary;
+  records: Array<{
+    id: number;
+    employee_id: number;
+    attendance_date: string;
+    team_id: number;
+    shift_id: number;
+    status: AttendanceStatus;
+    note: string | null;
+    recorded_by_id: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+};

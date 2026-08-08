@@ -9,6 +9,9 @@ import type {
   FormEvent,
 } from "react";
 import {
+  DailyAttendancePanel,
+} from "../features/attendance/DailyAttendancePanel";
+import {
   createAttendanceEmployee,
   createAttendanceShift,
   createAttendanceTeam,
@@ -34,6 +37,7 @@ import type {
 } from "../features/attendance/types";
 type ActiveSection =
   | "overview"
+  | "daily"
   | "teams"
   | "shifts"
   | "employees";
@@ -1003,6 +1007,10 @@ export function AttendanceManagementPage() {
               label: "Overview",
             },
             {
+              key: "daily",
+              label: "Daily Attendance",
+            },
+            {
               key: "teams",
               label: "Teams",
             },
@@ -1142,6 +1150,12 @@ export function AttendanceManagementPage() {
             </div>
           </article>
         </section>
+      ) : null}
+      {activeSection === "daily" ? (
+        <DailyAttendancePanel
+          shifts={shifts}
+          teams={teams}
+        />
       ) : null}
       {activeSection === "teams" ? (
         <section className="mt-8 grid gap-7 lg:grid-cols-[0.8fr_1.2fr]">

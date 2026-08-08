@@ -139,3 +139,43 @@ export async function deleteAttendanceEmployee(
     `/api/attendance/employees/${employeeId}`,
   );
 }
+
+
+export async function loadDailyAttendanceRoster(
+  attendanceDate: string,
+  teamId: number,
+  shiftId: number,
+): Promise<
+  import("./types").DailyAttendanceRoster
+> {
+  const response =
+    await apiClient.get<
+      import("./types").DailyAttendanceRoster
+    >(
+      "/api/attendance/daily/roster",
+      {
+        params: {
+          attendance_date:
+            attendanceDate,
+          team_id: teamId,
+          shift_id: shiftId,
+        },
+      },
+    );
+  return response.data;
+}
+export async function submitDailyAttendance(
+  payload:
+    import("./types").DailyAttendanceSubmit,
+): Promise<
+  import("./types").DailyAttendanceSubmission
+> {
+  const response =
+    await apiClient.post<
+      import("./types").DailyAttendanceSubmission
+    >(
+      "/api/attendance/daily",
+      payload,
+    );
+  return response.data;
+}

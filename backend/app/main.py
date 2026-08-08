@@ -12,6 +12,9 @@ from backend.app.api.routes.jobs import (
 from backend.app.api.routes.attendance import (
     router as attendance_router,
 )
+from backend.app.api.routes.attendance_daily import (
+    router as attendance_daily_router,
+)
 from backend.app.api.routes.documents import (
     router as documents_router,
 )
@@ -49,6 +52,9 @@ from backend.app.models.attendance_shift import (  # noqa: F401
 )
 from backend.app.models.attendance_employee import (  # noqa: F401
     AttendanceEmployee,
+)
+from backend.app.models.attendance_record import (  # noqa: F401
+    AttendanceRecord,
 )
 from backend.app.models.document import Document  # noqa: F401
 from backend.app.models.document_chunk import (  # noqa: F401
@@ -94,6 +100,7 @@ app.include_router(documents_router)
 app.include_router(jobs_router)
 app.include_router(candidates_router)
 app.include_router(attendance_router)
+app.include_router(attendance_daily_router)
 @app.get("/")
 def root() -> dict[str, str]:
     return {
