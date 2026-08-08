@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import {
+  downloadAttendanceHistoryCsv,
   loadAttendanceHistory,
   loadAttendanceHistoryReport,
 } from "./api";
@@ -150,6 +151,10 @@ export function AttendanceHistoryPanel({
     setIsReportLoading,
   ] = useState(false);
   const [
+    isExporting,
+    setIsExporting,
+  ] = useState(false);
+  const [
     errorMessage,
     setErrorMessage,
   ] = useState<string | null>(
@@ -279,6 +284,311 @@ export function AttendanceHistoryPanel({
     } finally {
       setIsReportLoading(false);
     }
+  }
+  async function downloadCsv():
+    Promise<void> {
+    if (!selectedReport) {
+      return;
+    }
+    setErrorMessage(null);
+    setIsExporting(true);
+    try {
+      const blob =
+        await downloadAttendanceHistoryCsv(
+          selectedReport
+            .attendance_date,
+          selectedReport.team_id,
+          selectedReport.shift_id,
+        );
+      const url =
+        URL.createObjectURL(blob);
+      const link =
+        document.createElement("a");
+      link.href = url;
+      link.download = [
+        "attendance",
+        selectedReport
+          .attendance_date,
+        `team-${selectedReport.team_id}`,
+        `shift-${selectedReport.shift_id}`,
+      ].join("_")
+        + ".csv";
+      document.body.appendChild(
+        link,
+      );
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not download the CSV report.",
+        ),
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }
+  function printReport(): void {
+    const reportElement =
+      document.querySelector<HTMLElement>(
+        ".attendance-report-print-area",
+      );
+    if (!reportElement) {
+      setErrorMessage(
+        "Could not prepare the attendance report for printing.",
+      );
+      return;
+    }
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=1000,height=800",
+    );
+    if (!printWindow) {
+      setErrorMessage(
+        "The print window was blocked by the browser. Allow pop-ups and try again.",
+      );
+      return;
+    }
+    const reportClone =
+      reportElement.cloneNode(
+        true,
+      ) as HTMLElement;
+    reportClone
+      .querySelectorAll(
+        ".attendance-report-print-hide",
+      )
+      .forEach(
+        (element) => {
+          element.remove();
+        },
+      );
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Attendance Report</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            html,
+            body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              color: #0f172a;
+              font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+            }
+            body {
+              width: 100%;
+              font-size: 11px;
+            }
+            .attendance-report-print-area {
+              width: 100%;
+              margin: 0;
+              padding: 0;
+              border: 0;
+              box-shadow: none;
+            }
+            .attendance-report-print-area > div:first-child {
+              margin-bottom: 10px;
+            }
+            h1,
+            h2,
+            h3,
+            p {
+              margin-top: 0;
+            }
+            h2 {
+              margin-bottom: 3px;
+              font-size: 20px;
+              line-height: 1.2;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 10.5px;
+            }
+            th {
+              padding: 7px 8px;
+              border-bottom: 1px solid #cbd5e1;
+              text-align: left;
+              font-size: 9px;
+            }
+            td {
+              padding: 7px 8px;
+              border-bottom: 1px solid #e2e8f0;
+              line-height: 1.25;
+            }
+            tr {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+            .grid {
+              display: grid;
+            }
+            .sm\\:grid-cols-2,
+            .md\\:grid-cols-5,
+            .lg\\:grid-cols-5,
+            .xl\\:grid-cols-5 {
+              grid-template-columns:
+                repeat(
+                  5,
+                  minmax(0, 1fr)
+                ) !important;
+            }
+            .grid-cols-2 {
+              grid-template-columns:
+                repeat(
+                  2,
+                  minmax(0, 1fr)
+                );
+            }
+            .grid-cols-5 {
+              grid-template-columns:
+                repeat(
+                  5,
+                  minmax(0, 1fr)
+                );
+            }
+            .gap-3,
+            .gap-4,
+            .gap-5,
+            .gap-6 {
+              gap: 8px;
+            }
+            .rounded-2xl,
+            .rounded-3xl {
+              border-radius: 8px;
+            }
+            .border {
+              border: 1px solid #e2e8f0;
+            }
+            .border-slate-200 {
+              border-color: #e2e8f0;
+            }
+            .bg-slate-50 {
+              background: #f8fafc;
+            }
+            .p-4,
+            .p-5,
+            .p-6,
+            .p-7 {
+              padding: 8px;
+            }
+            .mt-1 {
+              margin-top: 4px;
+            }
+            .mt-2 {
+              margin-top: 6px;
+            }
+            .mt-4,
+            .mt-5,
+            .mt-6,
+            .mt-7,
+            .mt-8 {
+              margin-top: 10px;
+            }
+            .font-semibold {
+              font-weight: 600;
+            }
+            .font-bold {
+              font-weight: 700;
+            }
+            .text-xs {
+              font-size: 9px;
+            }
+            .text-sm {
+              font-size: 10px;
+            }
+            .text-lg {
+              font-size: 18px;
+            }
+            .text-xl {
+              font-size: 20px;
+            }
+            .text-2xl {
+              font-size: 22px;
+              line-height: 1.1;
+            }
+            .text-3xl {
+              font-size: 24px;
+              line-height: 1.1;
+            }
+            .text-slate-500 {
+              color: #64748b;
+            }
+            .text-slate-600 {
+              color: #475569;
+            }
+            .text-slate-700 {
+              color: #334155;
+            }
+            .text-slate-900 {
+              color: #0f172a;
+            }
+            .text-emerald-700 {
+              color: #047857;
+            }
+            .text-amber-700 {
+              color: #b45309;
+            }
+            .text-sky-700 {
+              color: #0369a1;
+            }
+            .text-violet-600,
+            .text-violet-700 {
+              color: #7c3aed;
+            }
+            .text-right {
+              text-align: right;
+            }
+            .flex {
+              display: flex;
+            }
+            .items-start {
+              align-items: flex-start;
+            }
+            .items-center {
+              align-items: center;
+            }
+            .justify-between {
+              justify-content:
+                space-between;
+            }
+            .flex-wrap {
+              flex-wrap: wrap;
+            }
+            .attendance-report-print-hide {
+              display: none !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${reportClone.outerHTML}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(
+      () => {
+        printWindow.print();
+      },
+      250,
+    );
   }
   function clearFilters(): void {
     setDateFrom("");
@@ -574,7 +884,7 @@ export function AttendanceHistoryPanel({
         )}
       </article>
       {selectedReport ? (
-        <article className="mt-7 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+        <article className="attendance-report-print-area mt-7 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wide text-violet-600">
@@ -599,13 +909,36 @@ export function AttendanceHistoryPanel({
                 {" "}member(s)
               </p>
             </div>
-            <div className="text-right text-xs text-slate-500">
-              Last updated
-              <div className="mt-1 font-semibold text-slate-700">
-                {formatDateTime(
-                  selectedReport
-                    .last_updated_at,
-                )}
+            <div className="flex flex-col items-end gap-3">
+              <div className="attendance-report-print-hide flex flex-wrap justify-end gap-2">
+                <button
+                  className="rounded-xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-50"
+                  disabled={isExporting}
+                  onClick={() => {
+                    void downloadCsv();
+                  }}
+                  type="button"
+                >
+                  {isExporting
+                    ? "Preparing CSV..."
+                    : "Download CSV"}
+                </button>
+                <button
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+                  onClick={printReport}
+                  type="button"
+                >
+                  Print Report
+                </button>
+              </div>
+              <div className="text-right text-xs text-slate-500">
+                Last updated
+                <div className="mt-1 font-semibold text-slate-700">
+                  {formatDateTime(
+                    selectedReport
+                      .last_updated_at,
+                  )}
+                </div>
               </div>
             </div>
           </div>

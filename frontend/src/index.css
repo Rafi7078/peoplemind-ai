@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 :root {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
@@ -21,4 +21,79 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .attendance-report-print-area,
+  .attendance-report-print-area * {
+    visibility: visible !important;
+  }
+  .attendance-report-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    font-size: 10px !important;
+  }
+  .attendance-report-print-area h2 {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+    font-size: 20px !important;
+    line-height: 1.2 !important;
+  }
+  .attendance-report-print-area > div {
+    break-inside: avoid;
+  }
+  .attendance-report-print-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9px !important;
+  }
+  .attendance-report-print-area th {
+    padding: 6px 8px !important;
+    font-size: 8px !important;
+  }
+  .attendance-report-print-area td {
+    padding: 6px 8px !important;
+    line-height: 1.2 !important;
+  }
+  .attendance-report-print-area tr {
+    break-inside: avoid !important;
+  }
+  .attendance-report-print-area .rounded-2xl,
+  .attendance-report-print-area .rounded-3xl {
+    border-radius: 8px !important;
+  }
+  .attendance-report-print-area .p-4,
+  .attendance-report-print-area .p-5,
+  .attendance-report-print-area .p-6,
+  .attendance-report-print-area .p-7 {
+    padding: 8px !important;
+  }
+  .attendance-report-print-area .mt-6,
+  .attendance-report-print-area .mt-7,
+  .attendance-report-print-area .mt-8 {
+    margin-top: 10px !important;
+  }
+  .attendance-report-print-area .gap-4,
+  .attendance-report-print-area .gap-5,
+  .attendance-report-print-area .gap-6 {
+    gap: 8px !important;
+  }
+  .attendance-report-print-hide {
+    display: none !important;
+  }
 }

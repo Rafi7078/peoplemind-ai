@@ -498,3 +498,153 @@ def test_resubmit_updates_record_but_keeps_one_snapshot():
             )
         )
     assert snapshot_count == 1
+
+
+def test_csv_export_requires_authentication():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/attendance/history/report.csv",
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": 1,
+                "shift_id": 1,
+            },
+        )
+    assert response.status_code == 401
+def test_csv_export_contains_report_and_summary():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=2
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "present",
+                "on_leave",
+            ],
+        )
+        response = client.get(
+            "/api/attendance/history/report.csv",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    assert (
+        "text/csv"
+        in response.headers[
+            "content-type"
+        ]
+    )
+    text = response.text
+    assert "Attendance Report" in text
+    assert "Labelmaster" in text
+    assert "Night" in text
+    assert "Total Members,2" in text
+    assert "Present,1" in text
+    assert "On Leave,1" in text
+    assert "Employee 1" in text
+    assert "Employee 2" in text
+def test_csv_export_has_attachment_filename():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=["present"],
+        )
+        response = client.get(
+            "/api/attendance/history/report.csv",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    disposition = (
+        response.headers[
+            "content-disposition"
+        ]
+    )
+    assert "attachment" in disposition
+    assert (
+        "attendance_2026-08-12"
+        in disposition
+    )
+def test_csv_export_neutralizes_formula_cells():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    with TestingSessionLocal() as database:
+        employee = database.get(
+            AttendanceEmployee,
+            employee_ids[0],
+        )
+        assert employee is not None
+        employee.full_name = "=2+2"
+        database.commit()
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=["present"],
+        )
+        response = client.get(
+            "/api/attendance/history/report.csv",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    assert "'=2+2" in response.text

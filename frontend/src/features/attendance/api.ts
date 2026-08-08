@@ -312,3 +312,25 @@ export async function updateAttendanceLeave(
     );
   return response.data;
 }
+
+
+export async function downloadAttendanceHistoryCsv(
+  attendanceDate: string,
+  teamId: number,
+  shiftId: number,
+): Promise<Blob> {
+  const response =
+    await apiClient.get<Blob>(
+      "/api/attendance/history/report.csv",
+      {
+        params: {
+          attendance_date:
+            attendanceDate,
+          team_id: teamId,
+          shift_id: shiftId,
+        },
+        responseType: "blob",
+      },
+    );
+  return response.data;
+}
