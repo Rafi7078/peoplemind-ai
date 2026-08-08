@@ -32,6 +32,9 @@ class DailyRosterItem(BaseModel):
     ) = None
     note: str | None = None
     record_id: int | None = None
+    approved_leave_id: int | None = None
+    approved_leave_type: str | None = None
+    approved_leave_reason: str | None = None
 class DailyRosterRead(BaseModel):
     attendance_date: date
     team_id: int

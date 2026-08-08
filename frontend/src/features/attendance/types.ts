@@ -85,6 +85,9 @@ export type DailyRosterItem = {
   saved_status: AttendanceStatus | null;
   note: string | null;
   record_id: number | null;
+  approved_leave_id: number | null;
+  approved_leave_type: LeaveType | null;
+  approved_leave_reason: string | null;
 };
 export type DailyAttendanceRoster = {
   attendance_date: string;
@@ -167,4 +170,40 @@ export type AttendanceHistoryReport = {
   summary: DailyAttendanceSummary;
   employees: AttendanceHistoryEmployee[];
   last_updated_at: string;
+};
+
+
+export type LeaveType =
+  | "casual"
+  | "sick"
+  | "annual"
+  | "other";
+export type LeaveStatus =
+  | "pending"
+  | "approved"
+  | "cancelled";
+export type AttendanceLeave = {
+  id: number;
+  employee_id: number;
+  leave_type: LeaveType;
+  from_date: string;
+  to_date: string;
+  reason: string | null;
+  status: LeaveStatus;
+  created_by_id: number;
+  approved_by_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+export type AttendanceLeaveCreate = {
+  employee_id: number;
+  leave_type: LeaveType;
+  from_date: string;
+  to_date: string;
+  reason: string | null;
+  status: LeaveStatus;
+};
+export type AttendanceLeaveList = {
+  total: number;
+  items: AttendanceLeave[];
 };

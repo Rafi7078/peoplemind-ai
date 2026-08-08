@@ -13,6 +13,9 @@ from backend.app.models.attendance_record import (
 from backend.app.models.attendance_record_snapshot import (
     AttendanceRecordSnapshot,
 )
+from backend.app.models.attendance_leave import (
+    AttendanceLeave,
+)
 from backend.app.schemas.attendance_daily import (
     DailyAttendanceRecordRead,
     DailyAttendanceSubmissionRead,
@@ -112,6 +115,10 @@ def get_daily_roster(
         int,
         AttendanceRecord,
     ] = {}
+    approved_leave_by_employee_id: dict[
+        int,
+        AttendanceLeave,
+    ] = {}
     if employee_ids:
         records = list(
             database.scalars(
@@ -132,6 +139,28 @@ def get_daily_roster(
                 record
             for record in records
         }
+        approved_leaves = list(
+            database.scalars(
+                select(
+                    AttendanceLeave
+                ).where(
+                    AttendanceLeave
+                    .employee_id
+                    .in_(employee_ids),
+                    AttendanceLeave.status
+                    == "approved",
+                    AttendanceLeave.from_date
+                    <= attendance_date,
+                    AttendanceLeave.to_date
+                    >= attendance_date,
+                )
+            ).all()
+        )
+        approved_leave_by_employee_id = {
+            leave.employee_id:
+                leave
+            for leave in approved_leaves
+        }
     weekday_name = (
         attendance_date.strftime(
             "%A"
@@ -145,12 +174,21 @@ def get_daily_roster(
             records_by_employee_id
             .get(employee.id)
         )
-        suggested_status = (
-            "weekly_holiday"
-            if weekday_name
-            in employee.weekly_holidays
-            else "present"
+        approved_leave = (
+            approved_leave_by_employee_id
+            .get(employee.id)
         )
+        if (
+            weekday_name
+            in employee.weekly_holidays
+        ):
+            suggested_status = (
+                "weekly_holiday"
+            )
+        elif approved_leave is not None:
+            suggested_status = "on_leave"
+        else:
+            suggested_status = "present"
         items.append(
             DailyRosterItem(
                 employee_id=employee.id,
@@ -185,6 +223,24 @@ def get_daily_roster(
                 record_id=(
                     record.id
                     if record is not None
+                    else None
+                ),
+                approved_leave_id=(
+                    approved_leave.id
+                    if approved_leave
+                    is not None
+                    else None
+                ),
+                approved_leave_type=(
+                    approved_leave.leave_type
+                    if approved_leave
+                    is not None
+                    else None
+                ),
+                approved_leave_reason=(
+                    approved_leave.reason
+                    if approved_leave
+                    is not None
                     else None
                 ),
             )

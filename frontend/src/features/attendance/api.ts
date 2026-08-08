@@ -238,3 +238,77 @@ export async function loadAttendanceHistoryReport(
     );
   return response.data;
 }
+
+
+export async function loadAttendanceLeaves(
+  filters?: {
+    employeeId?: number;
+    status?: import("./types").LeaveStatus;
+    dateFrom?: string;
+    dateTo?: string;
+  },
+): Promise<
+  import("./types").AttendanceLeaveList
+> {
+  const response =
+    await apiClient.get<
+      import("./types").AttendanceLeaveList
+    >(
+      "/api/attendance/leaves",
+      {
+        params: {
+          employee_id:
+            filters?.employeeId
+            || undefined,
+          status:
+            filters?.status
+            || undefined,
+          date_from:
+            filters?.dateFrom
+            || undefined,
+          date_to:
+            filters?.dateTo
+            || undefined,
+        },
+      },
+    );
+  return response.data;
+}
+export async function createAttendanceLeave(
+  payload:
+    import("./types").AttendanceLeaveCreate,
+): Promise<
+  import("./types").AttendanceLeave
+> {
+  const response =
+    await apiClient.post<
+      import("./types").AttendanceLeave
+    >(
+      "/api/attendance/leaves",
+      payload,
+    );
+  return response.data;
+}
+export async function updateAttendanceLeave(
+  leaveId: number,
+  payload: Partial<{
+    leave_type:
+      import("./types").LeaveType;
+    from_date: string;
+    to_date: string;
+    reason: string | null;
+    status:
+      import("./types").LeaveStatus;
+  }>,
+): Promise<
+  import("./types").AttendanceLeave
+> {
+  const response =
+    await apiClient.patch<
+      import("./types").AttendanceLeave
+    >(
+      `/api/attendance/leaves/${leaveId}`,
+      payload,
+    );
+  return response.data;
+}

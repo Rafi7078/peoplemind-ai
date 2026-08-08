@@ -14,6 +14,7 @@ import type {
   DailyAttendanceEntry,
   DailyAttendanceRoster,
   DailyAttendanceSummary,
+  LeaveType,
 } from "./types";
 type Props = {
   teams: AttendanceTeam[];
@@ -70,6 +71,20 @@ function getApiErrorMessage(
     }
   }
   return fallback;
+}
+function formatLeaveType(
+  value: LeaveType,
+): string {
+  switch (value) {
+    case "casual":
+      return "Casual Leave";
+    case "sick":
+      return "Sick Leave";
+    case "annual":
+      return "Annual Leave";
+    case "other":
+      return "Other Leave";
+  }
 }
 function statusClass(
   status: AttendanceStatus,
@@ -733,6 +748,23 @@ export function DailyAttendancePanel({
                                   )?.label
                                 }
                               </span>
+                              {employee.approved_leave_id ? (
+                                <div className="mt-2 max-w-64">
+                                  <p className="text-xs font-semibold text-amber-700">
+                                    Approved{" "}
+                                    {employee.approved_leave_type
+                                      ? formatLeaveType(
+                                          employee.approved_leave_type,
+                                        )
+                                      : "Leave"}
+                                  </p>
+                                  {employee.approved_leave_reason ? (
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                                      {employee.approved_leave_reason}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="border-b border-slate-100 px-4 py-4">
                               <select
