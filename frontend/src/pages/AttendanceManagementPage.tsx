@@ -9,6 +9,9 @@ import type {
   FormEvent,
 } from "react";
 import {
+  AttendanceHistoryPanel,
+} from "../features/attendance/AttendanceHistoryPanel";
+import {
   DailyAttendancePanel,
 } from "../features/attendance/DailyAttendancePanel";
 import {
@@ -38,6 +41,7 @@ import type {
 type ActiveSection =
   | "overview"
   | "daily"
+  | "history"
   | "teams"
   | "shifts"
   | "employees";
@@ -995,7 +999,7 @@ export function AttendanceManagementPage() {
             {activeShiftCount} active shift(s)
           </span>
           <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-slate-200">
-            Daily attendance comes next
+            Daily attendance & reports ready
           </span>
         </div>
       </section>
@@ -1009,6 +1013,10 @@ export function AttendanceManagementPage() {
             {
               key: "daily",
               label: "Daily Attendance",
+            },
+            {
+              key: "history",
+              label: "History & Reports",
             },
             {
               key: "teams",
@@ -1153,6 +1161,12 @@ export function AttendanceManagementPage() {
       ) : null}
       {activeSection === "daily" ? (
         <DailyAttendancePanel
+          shifts={shifts}
+          teams={teams}
+        />
+      ) : null}
+      {activeSection === "history" ? (
+        <AttendanceHistoryPanel
           shifts={shifts}
           teams={teams}
         />

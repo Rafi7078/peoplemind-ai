@@ -133,3 +133,38 @@ export type DailyAttendanceSubmission = {
     updated_at: string;
   }>;
 };
+
+
+export type AttendanceHistoryItem = {
+  attendance_date: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+  summary: DailyAttendanceSummary;
+  last_updated_at: string;
+};
+export type AttendanceHistoryList = {
+  total_reports: number;
+  items: AttendanceHistoryItem[];
+};
+export type AttendanceHistoryEmployee = {
+  record_id: number;
+  employee_id: number;
+  employee_code: string;
+  full_name: string;
+  designation: string;
+  status: AttendanceStatus;
+  note: string | null;
+  updated_at: string;
+};
+export type AttendanceHistoryReport = {
+  attendance_date: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+  summary: DailyAttendanceSummary;
+  employees: AttendanceHistoryEmployee[];
+  last_updated_at: string;
+};

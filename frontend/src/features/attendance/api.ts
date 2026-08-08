@@ -179,3 +179,62 @@ export async function submitDailyAttendance(
     );
   return response.data;
 }
+
+
+export async function loadAttendanceHistory(
+  filters?: {
+    dateFrom?: string;
+    dateTo?: string;
+    teamId?: number;
+    shiftId?: number;
+  },
+): Promise<
+  import("./types").AttendanceHistoryList
+> {
+  const response =
+    await apiClient.get<
+      import("./types").AttendanceHistoryList
+    >(
+      "/api/attendance/history",
+      {
+        params: {
+          date_from:
+            filters?.dateFrom
+            || undefined,
+          date_to:
+            filters?.dateTo
+            || undefined,
+          team_id:
+            filters?.teamId
+            || undefined,
+          shift_id:
+            filters?.shiftId
+            || undefined,
+        },
+      },
+    );
+  return response.data;
+}
+export async function loadAttendanceHistoryReport(
+  attendanceDate: string,
+  teamId: number,
+  shiftId: number,
+): Promise<
+  import("./types").AttendanceHistoryReport
+> {
+  const response =
+    await apiClient.get<
+      import("./types").AttendanceHistoryReport
+    >(
+      "/api/attendance/history/report",
+      {
+        params: {
+          attendance_date:
+            attendanceDate,
+          team_id: teamId,
+          shift_id: shiftId,
+        },
+      },
+    );
+  return response.data;
+}

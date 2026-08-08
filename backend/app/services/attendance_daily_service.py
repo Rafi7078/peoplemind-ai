@@ -10,6 +10,9 @@ from backend.app.models.attendance_employee import (
 from backend.app.models.attendance_record import (
     AttendanceRecord,
 )
+from backend.app.models.attendance_record_snapshot import (
+    AttendanceRecordSnapshot,
+)
 from backend.app.schemas.attendance_daily import (
     DailyAttendanceRecordRead,
     DailyAttendanceSubmissionRead,
@@ -33,6 +36,39 @@ class AttendanceRecordConflictError(
     ValueError
 ):
     pass
+def _ensure_record_snapshot(
+    database: Session,
+    *,
+    record: AttendanceRecord,
+    employee: AttendanceEmployee,
+    team_name: str,
+    shift_name: str,
+) -> None:
+    existing_snapshot = database.scalar(
+        select(
+            AttendanceRecordSnapshot
+        ).where(
+            AttendanceRecordSnapshot
+            .attendance_record_id
+            == record.id
+        )
+    )
+    if existing_snapshot is not None:
+        return
+    database.add(
+        AttendanceRecordSnapshot(
+            attendance_record_id=record.id,
+            employee_code=(
+                employee.employee_code
+            ),
+            full_name=employee.full_name,
+            designation=(
+                employee.designation
+            ),
+            team_name=team_name,
+            shift_name=shift_name,
+        )
+    )
 def get_daily_roster(
     database: Session,
     *,
@@ -315,6 +351,18 @@ def submit_daily_attendance(
             saved_records.append(
                 existing
             )
+    database.flush()
+    for record in saved_records:
+        employee = roster_by_id[
+            record.employee_id
+        ]
+        _ensure_record_snapshot(
+            database,
+            record=record,
+            employee=employee,
+            team_name=team.name,
+            shift_name=shift.name,
+        )
     database.commit()
     for record in saved_records:
         database.refresh(record)
