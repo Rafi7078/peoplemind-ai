@@ -13,6 +13,12 @@ from backend.app.models.attendance_record import (
 from backend.app.models.attendance_record_snapshot import (
     AttendanceRecordSnapshot,
 )
+from backend.app.models.attendance_record_leave_snapshot import (
+    AttendanceRecordLeaveSnapshot,
+)
+from backend.app.models.attendance_leave import (
+    AttendanceLeave,
+)
 from backend.app.models.attendance_shift import (
     AttendanceShift,
 )
@@ -41,6 +47,7 @@ def _history_statement():
         select(
             AttendanceRecord,
             AttendanceRecordSnapshot,
+            AttendanceRecordLeaveSnapshot,
             AttendanceEmployee,
             AttendanceTeam,
             AttendanceShift,
@@ -48,6 +55,12 @@ def _history_statement():
         .outerjoin(
             AttendanceRecordSnapshot,
             AttendanceRecordSnapshot
+            .attendance_record_id
+            == AttendanceRecord.id,
+        )
+        .outerjoin(
+            AttendanceRecordLeaveSnapshot,
+            AttendanceRecordLeaveSnapshot
             .attendance_record_id
             == AttendanceRecord.id,
         )
@@ -139,6 +152,56 @@ def _snapshot_values(
         team_name,
         shift_name,
     )
+def _backfill_legacy_leave_snapshot(
+    database: Session,
+    *,
+    record: AttendanceRecord,
+) -> AttendanceRecordLeaveSnapshot | None:
+    if record.status != "on_leave":
+        return None
+    approved_leave = database.scalar(
+        select(
+            AttendanceLeave
+        )
+        .where(
+            AttendanceLeave.employee_id
+            == record.employee_id,
+            AttendanceLeave.status
+            == "approved",
+            AttendanceLeave.from_date
+            <= record.attendance_date,
+            AttendanceLeave.to_date
+            >= record.attendance_date,
+        )
+        .order_by(
+            AttendanceLeave.id.asc()
+        )
+    )
+    if approved_leave is None:
+        return None
+    snapshot = (
+        AttendanceRecordLeaveSnapshot(
+            attendance_record_id=record.id,
+            attendance_leave_id=(
+                approved_leave.id
+            ),
+            leave_type=(
+                approved_leave.leave_type
+            ),
+            leave_reason=(
+                approved_leave.reason
+            ),
+            leave_from_date=(
+                approved_leave.from_date
+            ),
+            leave_to_date=(
+                approved_leave.to_date
+            ),
+        )
+    )
+    database.add(snapshot)
+    database.flush()
+    return snapshot
 def list_attendance_history(
     database: Session,
     *,
@@ -197,6 +260,7 @@ def list_attendance_history(
     for (
         record,
         snapshot,
+        leave_snapshot,
         employee,
         team,
         shift,
@@ -322,9 +386,11 @@ def get_attendance_report(
     report_team_name: str | None = None
     report_shift_name: str | None = None
     last_updated_at = None
+    leave_snapshot_backfilled = False
     for (
         record,
         snapshot,
+        leave_snapshot,
         employee,
         team,
         shift,
@@ -359,6 +425,20 @@ def get_attendance_report(
                 record.updated_at
             )
         records.append(record)
+        if (
+            record.status == "on_leave"
+            and leave_snapshot is None
+        ):
+            leave_snapshot = (
+                _backfill_legacy_leave_snapshot(
+                    database,
+                    record=record,
+                )
+            )
+            if leave_snapshot is not None:
+                leave_snapshot_backfilled = (
+                    True
+                )
         employees.append(
             AttendanceHistoryEmployeeRead(
                 record_id=record.id,
@@ -372,6 +452,59 @@ def get_attendance_report(
                 designation=designation,
                 status=record.status,
                 note=record.note,
+                leave_id=(
+                    leave_snapshot
+                    .attendance_leave_id
+                    if (
+                        record.status
+                        == "on_leave"
+                        and leave_snapshot
+                        is not None
+                    )
+                    else None
+                ),
+                leave_type=(
+                    leave_snapshot.leave_type
+                    if (
+                        record.status
+                        == "on_leave"
+                        and leave_snapshot
+                        is not None
+                    )
+                    else None
+                ),
+                leave_reason=(
+                    leave_snapshot.leave_reason
+                    if (
+                        record.status
+                        == "on_leave"
+                        and leave_snapshot
+                        is not None
+                    )
+                    else None
+                ),
+                leave_from_date=(
+                    leave_snapshot
+                    .leave_from_date
+                    if (
+                        record.status
+                        == "on_leave"
+                        and leave_snapshot
+                        is not None
+                    )
+                    else None
+                ),
+                leave_to_date=(
+                    leave_snapshot
+                    .leave_to_date
+                    if (
+                        record.status
+                        == "on_leave"
+                        and leave_snapshot
+                        is not None
+                    )
+                    else None
+                ),
                 updated_at=(
                     record.updated_at
                 ),
@@ -384,6 +517,8 @@ def get_attendance_report(
     assert report_team_name is not None
     assert report_shift_name is not None
     assert last_updated_at is not None
+    if leave_snapshot_backfilled:
+        database.commit()
     return AttendanceHistoryReportRead(
         attendance_date=(
             attendance_date

@@ -13,6 +13,9 @@ from backend.app.models.attendance_record import (
 from backend.app.models.attendance_record_snapshot import (
     AttendanceRecordSnapshot,
 )
+from backend.app.models.attendance_record_leave_snapshot import (
+    AttendanceRecordLeaveSnapshot,
+)
 from backend.app.models.attendance_leave import (
     AttendanceLeave,
 )
@@ -71,6 +74,67 @@ def _ensure_record_snapshot(
             team_name=team_name,
             shift_name=shift_name,
         )
+    )
+def _sync_record_leave_snapshot(
+    database: Session,
+    *,
+    record: AttendanceRecord,
+    approved_leave: AttendanceLeave | None,
+) -> None:
+    existing_snapshot = database.scalar(
+        select(
+            AttendanceRecordLeaveSnapshot
+        ).where(
+            AttendanceRecordLeaveSnapshot
+            .attendance_record_id
+            == record.id
+        )
+    )
+    if (
+        record.status != "on_leave"
+        or approved_leave is None
+    ):
+        if existing_snapshot is not None:
+            database.delete(
+                existing_snapshot
+            )
+        return
+    if existing_snapshot is None:
+        database.add(
+            AttendanceRecordLeaveSnapshot(
+                attendance_record_id=record.id,
+                attendance_leave_id=(
+                    approved_leave.id
+                ),
+                leave_type=(
+                    approved_leave.leave_type
+                ),
+                leave_reason=(
+                    approved_leave.reason
+                ),
+                leave_from_date=(
+                    approved_leave.from_date
+                ),
+                leave_to_date=(
+                    approved_leave.to_date
+                ),
+            )
+        )
+        return
+    existing_snapshot.attendance_leave_id = (
+        approved_leave.id
+    )
+    existing_snapshot.leave_type = (
+        approved_leave.leave_type
+    )
+    existing_snapshot.leave_reason = (
+        approved_leave.reason
+    )
+    existing_snapshot.leave_from_date = (
+        approved_leave.from_date
+    )
+    existing_snapshot.leave_to_date = (
+        approved_leave.to_date
     )
 def get_daily_roster(
     database: Session,
@@ -302,6 +366,33 @@ def submit_daily_attendance(
     roster_ids = set(
         roster_by_id
     )
+    approved_leave_by_employee_id: dict[
+        int,
+        AttendanceLeave,
+    ] = {}
+    if roster_ids:
+        approved_leaves = list(
+            database.scalars(
+                select(
+                    AttendanceLeave
+                ).where(
+                    AttendanceLeave
+                    .employee_id
+                    .in_(roster_ids),
+                    AttendanceLeave.status
+                    == "approved",
+                    AttendanceLeave.from_date
+                    <= request.attendance_date,
+                    AttendanceLeave.to_date
+                    >= request.attendance_date,
+                )
+            ).all()
+        )
+        approved_leave_by_employee_id = {
+            leave.employee_id:
+                leave
+            for leave in approved_leaves
+        }
     submitted_ids = {
         entry.employee_id
         for entry in request.entries
@@ -418,6 +509,14 @@ def submit_daily_attendance(
             employee=employee,
             team_name=team.name,
             shift_name=shift.name,
+        )
+        _sync_record_leave_snapshot(
+            database,
+            record=record,
+            approved_leave=(
+                approved_leave_by_employee_id
+                .get(record.employee_id)
+            ),
         )
     database.commit()
     for record in saved_records:

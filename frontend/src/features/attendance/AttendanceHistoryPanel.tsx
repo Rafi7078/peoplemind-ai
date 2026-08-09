@@ -22,6 +22,22 @@ type Props = {
   teams: AttendanceTeam[];
   shifts: AttendanceShift[];
 };
+function formatLeaveType(
+  value: string,
+): string {
+  switch (value) {
+    case "casual":
+      return "Casual Leave";
+    case "sick":
+      return "Sick Leave";
+    case "annual":
+      return "Annual Leave";
+    case "other":
+      return "Other Leave";
+    default:
+      return value;
+  }
+}
 function formatStatus(
   status: AttendanceStatus,
 ): string {
@@ -1056,6 +1072,39 @@ export function AttendanceHistoryPanel({
                               employee.status,
                             )}
                           </span>
+                          {/* Approved leave details */}
+                          {employee.leave_type ? (
+                            <div className="mt-2 max-w-64 text-xs leading-5 text-slate-500">
+                              <div className="font-semibold text-amber-700">
+                                {formatLeaveType(
+                                  employee.leave_type,
+                                )}
+                              </div>
+                              {(
+                                employee.leave_from_date
+                                && employee.leave_to_date
+                              ) ? (
+                                <div>
+                                  {formatDate(
+                                    employee.leave_from_date,
+                                  )}
+                                  {" to "}
+                                  {formatDate(
+                                    employee.leave_to_date,
+                                  )}
+                                </div>
+                              ) : null}
+                              {employee.leave_reason ? (
+                                <div>
+                                  Reason:{" "}
+                                  {
+                                    employee
+                                      .leave_reason
+                                  }
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-600">
                           {

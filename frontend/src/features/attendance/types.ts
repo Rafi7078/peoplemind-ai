@@ -159,6 +159,11 @@ export type AttendanceHistoryEmployee = {
   designation: string;
   status: AttendanceStatus;
   note: string | null;
+  leave_id: number | null;
+  leave_type: LeaveType | null;
+  leave_reason: string | null;
+  leave_from_date: string | null;
+  leave_to_date: string | null;
   updated_at: string;
 };
 export type AttendanceHistoryReport = {

@@ -33,6 +33,11 @@ class AttendanceHistoryEmployeeRead(
     designation: str
     status: AttendanceStatus
     note: str | None
+    leave_id: int | None = None
+    leave_type: str | None = None
+    leave_reason: str | None = None
+    leave_from_date: date | None = None
+    leave_to_date: date | None = None
     updated_at: datetime
 class AttendanceHistoryReportRead(
     BaseModel

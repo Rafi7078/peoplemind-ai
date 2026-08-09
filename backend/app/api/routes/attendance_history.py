@@ -215,6 +215,10 @@ def download_attendance_report_csv(
             "Employee Name",
             "Designation",
             "Status",
+            "Leave Type",
+            "Leave Reason",
+            "Leave From",
+            "Leave To",
             "Note",
         ]
     )
@@ -233,6 +237,31 @@ def download_attendance_report_csv(
                 ),
                 _format_attendance_status(
                     employee.status
+                ),
+                (
+                    _format_attendance_status(
+                        employee.leave_type
+                    )
+                    if employee.leave_type
+                    is not None
+                    else ""
+                ),
+                _csv_safe(
+                    employee.leave_reason
+                ),
+                (
+                    employee.leave_from_date
+                    .isoformat()
+                    if employee.leave_from_date
+                    is not None
+                    else ""
+                ),
+                (
+                    employee.leave_to_date
+                    .isoformat()
+                    if employee.leave_to_date
+                    is not None
+                    else ""
                 ),
                 _csv_safe(
                     employee.note

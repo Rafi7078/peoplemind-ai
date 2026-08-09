@@ -1,5 +1,6 @@
 
 from collections.abc import Generator
+from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import (
@@ -25,6 +26,12 @@ from backend.app.models.attendance_employee import (
 )
 from backend.app.models.attendance_record_snapshot import (
     AttendanceRecordSnapshot,
+)
+from backend.app.models.attendance_record_leave_snapshot import (
+    AttendanceRecordLeaveSnapshot,
+)
+from backend.app.models.attendance_leave import (
+    AttendanceLeave,
 )
 from backend.app.models.attendance_shift import (
     AttendanceShift,
@@ -561,6 +568,10 @@ def test_csv_export_contains_report_and_summary():
     assert "Total Members,2" in text
     assert "Present,1" in text
     assert "On Leave,1" in text
+    assert "Leave Type" in text
+    assert "Leave Reason" in text
+    assert "Leave From" in text
+    assert "Leave To" in text
     assert "Employee 1" in text
     assert "Employee 2" in text
 def test_csv_export_has_attachment_filename():
@@ -648,3 +659,229 @@ def test_csv_export_neutralizes_formula_cells():
     assert saved.status_code == 200
     assert response.status_code == 200
     assert "'=2+2" in response.text
+
+
+def _create_approved_leave(
+    *,
+    employee_id: int,
+    leave_type: str,
+    from_date: str,
+    to_date: str,
+    reason: str | None,
+) -> int:
+    with TestingSessionLocal() as database:
+        admin = database.scalar(
+            select(User)
+        )
+        assert admin is not None
+        leave = AttendanceLeave(
+            employee_id=employee_id,
+            leave_type=leave_type,
+            from_date=date.fromisoformat(
+                from_date
+            ),
+            to_date=date.fromisoformat(
+                to_date
+            ),
+            reason=reason,
+            status="approved",
+            created_by_id=admin.id,
+            approved_by_id=admin.id,
+        )
+        database.add(leave)
+        database.commit()
+        database.refresh(leave)
+        return leave.id
+def test_report_preserves_approved_leave_snapshot():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    leave_id = _create_approved_leave(
+        employee_id=employee_ids[0],
+        leave_type="annual",
+        from_date="2026-08-12",
+        to_date="2026-08-13",
+        reason="Family trip",
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date="2026-08-12",
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=["on_leave"],
+        )
+        assert saved.status_code == 200
+    with TestingSessionLocal() as database:
+        snapshot = database.scalar(
+            select(
+                AttendanceRecordLeaveSnapshot
+            )
+        )
+        assert snapshot is not None
+        assert snapshot.leave_type == "annual"
+        assert (
+            snapshot.leave_reason
+            == "Family trip"
+        )
+        leave = database.get(
+            AttendanceLeave,
+            leave_id,
+        )
+        assert leave is not None
+        leave.leave_type = "sick"
+        leave.reason = "Changed later"
+        leave.status = "cancelled"
+        database.commit()
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+        csv_response = client.get(
+            "/api/attendance/history/report.csv",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert response.status_code == 200
+    employee = (
+        response.json()["employees"][0]
+    )
+    assert employee["status"] == "on_leave"
+    assert employee["leave_id"] == leave_id
+    assert employee["leave_type"] == "annual"
+    assert (
+        employee["leave_reason"]
+        == "Family trip"
+    )
+    assert (
+        employee["leave_from_date"]
+        == "2026-08-12"
+    )
+    assert (
+        employee["leave_to_date"]
+        == "2026-08-13"
+    )
+    assert csv_response.status_code == 200
+    assert "Annual" in csv_response.text
+    assert "Family trip" in csv_response.text
+    assert "2026-08-12" in csv_response.text
+    assert "2026-08-13" in csv_response.text
+def test_report_backfills_legacy_leave_snapshot():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date="2026-08-14",
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=["on_leave"],
+        )
+    assert saved.status_code == 200
+    with TestingSessionLocal() as database:
+        initial_snapshot = database.scalar(
+            select(
+                AttendanceRecordLeaveSnapshot
+            )
+        )
+        assert initial_snapshot is None
+    leave_id = _create_approved_leave(
+        employee_id=employee_ids[0],
+        leave_type="casual",
+        from_date="2026-08-14",
+        to_date="2026-08-14",
+        reason="Personal work",
+    )
+    with TestClient(app) as client:
+        first_report = client.get(
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-14",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert first_report.status_code == 200
+    first_employee = (
+        first_report.json()
+        ["employees"][0]
+    )
+    assert (
+        first_employee["leave_type"]
+        == "casual"
+    )
+    assert (
+        first_employee["leave_reason"]
+        == "Personal work"
+    )
+    with TestingSessionLocal() as database:
+        snapshots = list(
+            database.scalars(
+                select(
+                    AttendanceRecordLeaveSnapshot
+                )
+            ).all()
+        )
+        assert len(snapshots) == 1
+        leave = database.get(
+            AttendanceLeave,
+            leave_id,
+        )
+        assert leave is not None
+        leave.leave_type = "sick"
+        leave.reason = "Later change"
+        leave.status = "cancelled"
+        database.commit()
+    with TestClient(app) as client:
+        second_report = client.get(
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-14",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert second_report.status_code == 200
+    second_employee = (
+        second_report.json()
+        ["employees"][0]
+    )
+    assert (
+        second_employee["leave_type"]
+        == "casual"
+    )
+    assert (
+        second_employee["leave_reason"]
+        == "Personal work"
+    )
