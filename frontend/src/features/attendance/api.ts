@@ -355,3 +355,28 @@ export async function downloadAttendanceHistoryPdf(
     );
   return response.data;
 }
+
+export async function loadAttendanceAnalytics(
+  dateFrom: string,
+  dateTo: string,
+  teamId?: number,
+  shiftId?: number,
+): Promise<
+  import("./types").AttendanceAnalyticsRead
+> {
+  const response =
+    await apiClient.get<
+      import("./types").AttendanceAnalyticsRead
+    >(
+      "/api/attendance/analytics",
+      {
+        params: {
+          date_from: dateFrom,
+          date_to: dateTo,
+          team_id: teamId,
+          shift_id: shiftId,
+        },
+      },
+    );
+  return response.data;
+}

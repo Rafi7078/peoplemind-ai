@@ -212,3 +212,49 @@ export type AttendanceLeaveList = {
   total: number;
   items: AttendanceLeave[];
 };
+
+export interface AttendanceAnalyticsCounts {
+  total_records: number;
+  working_day_records: number;
+  present: number;
+  absent: number;
+  on_leave: number;
+  weekly_holiday: number;
+  attendance_rate: number;
+}
+export interface AttendanceAnalyticsDailyItem
+  extends AttendanceAnalyticsCounts {
+  attendance_date: string;
+}
+export interface AttendanceAnalyticsTeamItem
+  extends AttendanceAnalyticsCounts {
+  team_id: number;
+  team_name: string;
+}
+export interface AttendanceAnalyticsShiftItem
+  extends AttendanceAnalyticsCounts {
+  shift_id: number;
+  shift_name: string;
+}
+export interface AttendanceAnalyticsEmployeeItem
+  extends AttendanceAnalyticsCounts {
+  employee_id: number;
+  employee_code: string;
+  full_name: string;
+  designation: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+}
+export interface AttendanceAnalyticsRead {
+  date_from: string;
+  date_to: string;
+  team_id: number | null;
+  shift_id: number | null;
+  summary: AttendanceAnalyticsCounts;
+  daily_trend: AttendanceAnalyticsDailyItem[];
+  teams: AttendanceAnalyticsTeamItem[];
+  shifts: AttendanceAnalyticsShiftItem[];
+  employees: AttendanceAnalyticsEmployeeItem[];
+}
