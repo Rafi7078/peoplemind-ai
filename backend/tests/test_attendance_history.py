@@ -1,7 +1,9 @@
 
 from collections.abc import Generator
 from datetime import date
+from io import BytesIO
 import pytest
+from pypdf import PdfReader
 from fastapi.testclient import TestClient
 from sqlalchemy import (
     create_engine,
@@ -885,3 +887,192 @@ def test_report_backfills_legacy_leave_snapshot():
         second_employee["leave_reason"]
         == "Personal work"
     )
+
+
+def test_pdf_export_requires_authentication():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/attendance/history/report.pdf",
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": 1,
+                "shift_id": 1,
+            },
+        )
+    assert response.status_code == 401
+def test_pdf_export_returns_valid_pdf():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=2
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "present",
+                "absent",
+            ],
+        )
+        response = client.get(
+            "/api/attendance/history/report.pdf",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    assert (
+        response.headers[
+            "content-type"
+        ]
+        == "application/pdf"
+    )
+    assert response.content.startswith(
+        b"%PDF"
+    )
+    disposition = (
+        response.headers[
+            "content-disposition"
+        ]
+    )
+    assert "attachment" in disposition
+    assert (
+        "attendance_2026-08-12"
+        in disposition
+    )
+    reader = PdfReader(
+        BytesIO(
+            response.content
+        )
+    )
+    assert len(reader.pages) == 1
+    text = (
+        reader.pages[0]
+        .extract_text()
+    )
+    assert "GROUP ATTENDANCE REPORT" in text
+    assert "Labelmaster" in text
+    assert "Night" in text
+    assert "Employee 1" in text
+    assert "Employee 2" in text
+    assert "Present" in text
+    assert "Absent" in text
+def test_pdf_export_contains_leave_details():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    _create_approved_leave(
+        employee_id=employee_ids[0],
+        leave_type="annual",
+        from_date="2026-08-12",
+        to_date="2026-08-13",
+        reason="Family trip",
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "on_leave"
+            ],
+        )
+        response = client.get(
+            "/api/attendance/history/report.pdf",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    reader = PdfReader(
+        BytesIO(
+            response.content
+        )
+    )
+    text = "\n".join(
+        page.extract_text()
+        for page in reader.pages
+    )
+    assert "On Leave" in text
+    assert "Annual Leave" in text
+    assert "12 Aug 2026 to 13 Aug 2026" in text
+    assert "Family trip" in text
+def test_pdf_export_supports_multiple_pages():
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=40
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-12"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "present"
+                for _ in employee_ids
+            ],
+        )
+        response = client.get(
+            "/api/attendance/history/report.pdf",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-12",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert saved.status_code == 200
+    assert response.status_code == 200
+    reader = PdfReader(
+        BytesIO(
+            response.content
+        )
+    )
+    assert len(reader.pages) >= 2
+    all_text = "\n".join(
+        page.extract_text()
+        for page in reader.pages
+    )
+    assert "Employee 1" in all_text
+    assert "Employee 40" in all_text

@@ -19,6 +19,7 @@ from backend.app.schemas.attendance_history import (
 )
 from backend.app.services import (
     attendance_history_service,
+    attendance_pdf_service,
 )
 router = APIRouter(
     prefix="/api/attendance/history",
@@ -100,6 +101,65 @@ def _format_attendance_status(
             " ",
         )
         .title()
+    )
+@router.get(
+    "/report.pdf",
+    response_class=Response,
+    summary=(
+        "Download attendance report as PDF"
+    ),
+)
+def download_attendance_report_pdf(
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+    attendance_date: date = Query(),
+    team_id: int = Query(gt=0),
+    shift_id: int = Query(gt=0),
+) -> Response:
+    try:
+        report = (
+            attendance_history_service
+            .get_attendance_report(
+                database=database,
+                attendance_date=(
+                    attendance_date
+                ),
+                team_id=team_id,
+                shift_id=shift_id,
+            )
+        )
+    except (
+        attendance_history_service
+        .AttendanceHistoryNotFoundError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+    pdf_content = (
+        attendance_pdf_service
+        .build_attendance_report_pdf(
+            report
+        )
+    )
+    filename = (
+        "attendance_"
+        f"{attendance_date.isoformat()}"
+        f"_team_{team_id}"
+        f"_shift_{shift_id}.pdf"
+    )
+    return Response(
+        content=pdf_content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="'
+                + filename
+                + '"'
+            )
+        },
     )
 @router.get(
     "/report.csv",

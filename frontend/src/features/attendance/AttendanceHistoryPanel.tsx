@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   downloadAttendanceHistoryCsv,
+  downloadAttendanceHistoryPdf,
   loadAttendanceHistory,
   loadAttendanceHistoryReport,
 } from "./api";
@@ -169,6 +170,10 @@ export function AttendanceHistoryPanel({
   const [
     isExporting,
     setIsExporting,
+  ] = useState(false);
+  const [
+    isPdfExporting,
+    setIsPdfExporting,
   ] = useState(false);
   const [
     errorMessage,
@@ -344,6 +349,51 @@ export function AttendanceHistoryPanel({
       );
     } finally {
       setIsExporting(false);
+    }
+  }
+  async function downloadPdf():
+    Promise<void> {
+    if (!selectedReport) {
+      return;
+    }
+    setErrorMessage(null);
+    setIsPdfExporting(true);
+    try {
+      const blob =
+        await downloadAttendanceHistoryPdf(
+          selectedReport
+            .attendance_date,
+          selectedReport.team_id,
+          selectedReport.shift_id,
+        );
+      const url =
+        URL.createObjectURL(blob);
+      const link =
+        document.createElement("a");
+      link.href = url;
+      link.download = [
+        "attendance",
+        selectedReport
+          .attendance_date,
+        `team-${selectedReport.team_id}`,
+        `shift-${selectedReport.shift_id}`,
+      ].join("_")
+        + ".pdf";
+      document.body.appendChild(
+        link,
+      );
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not download the PDF report.",
+        ),
+      );
+    } finally {
+      setIsPdfExporting(false);
     }
   }
   function printReport(): void {
@@ -938,6 +988,18 @@ export function AttendanceHistoryPanel({
                   {isExporting
                     ? "Preparing CSV..."
                     : "Download CSV"}
+                </button>
+                <button
+                  className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50"
+                  disabled={isPdfExporting}
+                  onClick={() => {
+                    void downloadPdf();
+                  }}
+                  type="button"
+                >
+                  {isPdfExporting
+                    ? "Preparing PDF..."
+                    : "Download PDF"}
                 </button>
                 <button
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
