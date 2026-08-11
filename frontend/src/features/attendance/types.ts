@@ -258,3 +258,53 @@ export interface AttendanceAnalyticsRead {
   shifts: AttendanceAnalyticsShiftItem[];
   employees: AttendanceAnalyticsEmployeeItem[];
 }
+
+
+export type AttendanceMonthlyDayStatus =
+  | "present"
+  | "absent"
+  | "on_leave"
+  | "weekly_holiday"
+  | "not_recorded";
+export interface AttendanceMonthlySummary {
+  days_in_month: number;
+  recorded_days: number;
+  not_recorded_days: number;
+  working_day_records: number;
+  present: number;
+  absent: number;
+  on_leave: number;
+  weekly_holiday: number;
+  attendance_rate: number;
+}
+export interface AttendanceMonthlyDay {
+  attendance_date: string;
+  weekday: string;
+  status: AttendanceMonthlyDayStatus;
+  is_recorded: boolean;
+  record_id: number | null;
+  note: string | null;
+  team_name: string;
+  shift_name: string;
+  leave_id: number | null;
+  leave_type: string | null;
+  leave_reason: string | null;
+  leave_from_date: string | null;
+  leave_to_date: string | null;
+  updated_at: string | null;
+}
+export interface AttendanceEmployeeMonthlyReport {
+  employee_id: number;
+  employee_code: string;
+  full_name: string;
+  designation: string;
+  team_id: number;
+  team_name: string;
+  shift_id: number;
+  shift_name: string;
+  year: number;
+  month: number;
+  month_label: string;
+  summary: AttendanceMonthlySummary;
+  days: AttendanceMonthlyDay[];
+}

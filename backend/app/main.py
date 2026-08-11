@@ -24,6 +24,9 @@ from backend.app.api.routes.attendance_leave import (
 from backend.app.api.routes.attendance_analytics import (
     router as attendance_analytics_router,
 )
+from backend.app.api.routes.attendance_employee_monthly import (
+    router as attendance_employee_monthly_router,
+)
 from backend.app.api.routes.documents import (
     router as documents_router,
 )
@@ -119,6 +122,7 @@ app.include_router(attendance_daily_router)
 app.include_router(attendance_history_router)
 app.include_router(attendance_leave_router)
 app.include_router(attendance_analytics_router)
+app.include_router(attendance_employee_monthly_router)
 @app.get("/")
 def root() -> dict[str, str]:
     return {

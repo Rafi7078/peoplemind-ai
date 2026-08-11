@@ -380,3 +380,64 @@ export async function loadAttendanceAnalytics(
     );
   return response.data;
 }
+
+
+export async function loadEmployeeMonthlyReport(
+  employeeId: number,
+  year: number,
+  month: number,
+): Promise<
+  import("./types").AttendanceEmployeeMonthlyReport
+> {
+  const response =
+    await apiClient.get<
+      import("./types").AttendanceEmployeeMonthlyReport
+    >(
+      `/api/attendance/employees/${employeeId}/monthly-report`,
+      {
+        params: {
+          year,
+          month,
+        },
+      },
+    );
+  return response.data;
+}
+
+
+export async function downloadEmployeeMonthlyCsv(
+  employeeId: number,
+  year: number,
+  month: number,
+): Promise<Blob> {
+  const response =
+    await apiClient.get<Blob>(
+      `/api/attendance/employees/${employeeId}/monthly-report.csv`,
+      {
+        params: {
+          year,
+          month,
+        },
+        responseType: "blob",
+      },
+    );
+  return response.data;
+}
+export async function downloadEmployeeMonthlyPdf(
+  employeeId: number,
+  year: number,
+  month: number,
+): Promise<Blob> {
+  const response =
+    await apiClient.get<Blob>(
+      `/api/attendance/employees/${employeeId}/monthly-report.pdf`,
+      {
+        params: {
+          year,
+          month,
+        },
+        responseType: "blob",
+      },
+    );
+  return response.data;
+}

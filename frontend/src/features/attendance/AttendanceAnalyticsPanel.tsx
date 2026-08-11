@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 import {
   useState,
 } from "react";
@@ -478,11 +478,11 @@ export function AttendanceAnalyticsPanel({
                               {
                                 item.present
                               }{" "}
-                              present ?{" "}
+                              present |{" "}
                               {
                                 item.absent
                               }{" "}
-                              absent ?{" "}
+                              absent |{" "}
                               {
                                 item.on_leave
                               }{" "}
@@ -599,11 +599,11 @@ export function AttendanceAnalyticsPanel({
                               {
                                 item.present
                               }{" "}
-                              present ?{" "}
+                              present |{" "}
                               {
                                 item.absent
                               }{" "}
-                              absent ?{" "}
+                              absent |{" "}
                               {
                                 item.on_leave
                               }{" "}
@@ -674,11 +674,11 @@ export function AttendanceAnalyticsPanel({
                               {
                                 item.present
                               }{" "}
-                              present ?{" "}
+                              present |{" "}
                               {
                                 item.absent
                               }{" "}
-                              absent ?{" "}
+                              absent |{" "}
                               {
                                 item.on_leave
                               }{" "}
@@ -784,7 +784,7 @@ export function AttendanceAnalyticsPanel({
                                 {
                                   employee.employee_code
                                 }{" "}
-                                ?{" "}
+                                {" | "}
                                 {
                                   employee.designation
                                 }
@@ -861,4 +861,3 @@ export function AttendanceAnalyticsPanel({
     </section>
   );
 }
-

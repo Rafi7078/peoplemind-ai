@@ -15,6 +15,9 @@ import {
   AttendanceAnalyticsPanel,
 } from "../features/attendance/AttendanceAnalyticsPanel";
 import {
+  EmployeeMonthlyReportPanel,
+} from "../features/attendance/EmployeeMonthlyReportPanel";
+import {
   LeaveManagementPanel,
 } from "../features/attendance/LeaveManagementPanel";
 import {
@@ -49,6 +52,7 @@ type ActiveSection =
   | "daily"
   | "history"
   | "analytics"
+  | "monthly"
   | "leaves"
   | "teams"
   | "shifts"
@@ -1031,6 +1035,10 @@ export function AttendanceManagementPage() {
               label: "Analytics",
             },
             {
+              key: "monthly",
+              label: "Employee Reports",
+            },
+            {
               key: "leaves",
               label: "Leave Management",
             },
@@ -1187,6 +1195,11 @@ export function AttendanceManagementPage() {
       teams={teams}
     />
   ) : null}
+      {activeSection === "monthly" ? (
+        <EmployeeMonthlyReportPanel
+          employees={employees}
+        />
+      ) : null}
   {activeSection === "history" ? (
         <AttendanceHistoryPanel
           shifts={shifts}
