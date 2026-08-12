@@ -24,6 +24,1016 @@ select {
 }
 
 
+/* ==========================================================
+   PeopleMind AI login experience
+   ========================================================== */
+.pm-login-grid {
+  background-image:
+    linear-gradient(
+      rgba(56, 189, 248, 0.055) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(56, 189, 248, 0.055) 1px,
+      transparent 1px
+    );
+  background-size: 48px 48px;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent,
+      black 15%,
+      black 80%,
+      transparent
+    );
+  animation:
+    pm-grid-drift 24s linear infinite;
+}
+.pm-login-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+}
+.pm-login-orb-one {
+  top: 16%;
+  left: 53%;
+  width: 280px;
+  height: 280px;
+  background:
+    rgba(14, 165, 233, 0.16);
+  animation:
+    pm-orb-one 12s ease-in-out infinite;
+}
+.pm-login-orb-two {
+  right: -4%;
+  bottom: 12%;
+  width: 340px;
+  height: 340px;
+  background:
+    rgba(124, 58, 237, 0.13);
+  animation:
+    pm-orb-two 15s ease-in-out infinite;
+}
+.pm-login-orb-three {
+  left: 12%;
+  bottom: -15%;
+  width: 300px;
+  height: 300px;
+  background:
+    rgba(16, 185, 129, 0.08);
+  animation:
+    pm-orb-three 17s ease-in-out infinite;
+}
+.pm-login-scan {
+  left: -20%;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(56, 189, 248, 0.035),
+      transparent
+    );
+  transform: skewX(-12deg);
+  animation:
+    pm-scan 10s ease-in-out infinite;
+}
+.pm-logo-pulse {
+  animation:
+    pm-logo-pulse 3.5s ease-in-out infinite;
+}
+.pm-rise {
+  opacity: 0;
+  transform: translateY(16px);
+  animation:
+    pm-rise 0.7s ease forwards;
+}
+.pm-rise-one {
+  animation-delay: 0.08s;
+}
+.pm-rise-two {
+  animation-delay: 0.18s;
+}
+.pm-rise-three {
+  animation-delay: 0.3s;
+}
+.pm-rise-four {
+  animation-delay: 0.42s;
+}
+.pm-float-card {
+  animation:
+    pm-float 6s ease-in-out infinite;
+}
+.pm-float-delay-one {
+  animation-delay: -2s;
+}
+.pm-float-delay-two {
+  animation-delay: -4s;
+}
+.pm-light-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  pointer-events: none;
+}
+.pm-light-orb-one {
+  top: 9%;
+  right: 4%;
+  width: 270px;
+  height: 270px;
+  background:
+    rgba(56, 189, 248, 0.12);
+  animation:
+    pm-light-one 13s ease-in-out infinite;
+}
+.pm-light-orb-two {
+  bottom: 3%;
+  left: 2%;
+  width: 320px;
+  height: 320px;
+  background:
+    rgba(139, 92, 246, 0.08);
+  animation:
+    pm-light-two 16s ease-in-out infinite;
+}
+.pm-login-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.9),
+      transparent 36%,
+      rgba(56, 189, 248, 0.035)
+    );
+}
+.pm-login-button::before {
+  content: "";
+  position: absolute;
+  top: -100%;
+  left: -45%;
+  width: 28%;
+  height: 300%;
+  transform: rotate(24deg);
+  background:
+    linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.15),
+      transparent
+    );
+  animation:
+    pm-button-shine 4.8s ease-in-out infinite;
+}
+@keyframes pm-grid-drift {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      48px 48px,
+      48px 48px;
+  }
+}
+@keyframes pm-orb-one {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+  50% {
+    transform:
+      translate3d(-50px, 32px, 0)
+      scale(1.13);
+  }
+}
+@keyframes pm-orb-two {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      scale(1);
+  }
+  50% {
+    transform:
+      translate3d(-48px, -45px, 0)
+      scale(1.08);
+  }
+}
+@keyframes pm-orb-three {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(70px, -30px, 0);
+  }
+}
+@keyframes pm-scan {
+  0%,
+  15% {
+    left: -30%;
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  70% {
+    left: 115%;
+    opacity: 0;
+  }
+  100% {
+    left: 115%;
+    opacity: 0;
+  }
+}
+@keyframes pm-logo-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0
+      rgba(34, 211, 238, 0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px
+      rgba(34, 211, 238, 0.06);
+  }
+}
+@keyframes pm-rise {
+  to {
+    opacity: 1;
+    transform:
+      translateY(0);
+  }
+}
+@keyframes pm-float {
+  0%,
+  100% {
+    transform:
+      translateY(0);
+  }
+  50% {
+    transform:
+      translateY(-7px);
+  }
+}
+@keyframes pm-light-one {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(-45px, 55px, 0);
+  }
+}
+@keyframes pm-light-two {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(55px, -35px, 0);
+  }
+}
+@keyframes pm-button-shine {
+  0%,
+  60% {
+    left: -45%;
+  }
+  85%,
+  100% {
+    left: 125%;
+  }
+}
+/* ==========================================================
+   PeopleMind premium AI login visual
+   ========================================================== */
+.pm-ai-core-wrap {
+  filter:
+    drop-shadow(
+      0 0 34px
+      rgba(34, 211, 238, 0.08)
+    );
+}
+.pm-core-glow {
+  background:
+    radial-gradient(
+      circle,
+      rgba(34, 211, 238, 0.22) 0%,
+      rgba(56, 189, 248, 0.08) 42%,
+      transparent 72%
+    );
+  filter: blur(12px);
+  animation:
+    pm-core-breathe 3.2s ease-in-out infinite;
+}
+.pm-ai-core {
+  box-shadow:
+    inset 0 0 24px
+      rgba(34, 211, 238, 0.08),
+    0 0 32px
+      rgba(34, 211, 238, 0.10);
+  animation:
+    pm-core-pulse 3s ease-in-out infinite;
+}
+.pm-orbit {
+  transform-origin: center;
+}
+.pm-orbit-one {
+  animation:
+    pm-orbit-spin 13s linear infinite;
+}
+.pm-orbit-two {
+  animation:
+    pm-orbit-spin-reverse 10s linear infinite;
+}
+.pm-orbit-three {
+  animation:
+    pm-orbit-spin 7s linear infinite;
+}
+.pm-orbit-dot {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  box-shadow:
+    0 0 16px currentColor;
+}
+.pm-node {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid
+    rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background:
+    rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(12px);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.pm-node-doc {
+  top: 20px;
+  right: 22px;
+  color: #67e8f9;
+  animation:
+    pm-node-float-one 4.5s ease-in-out infinite;
+}
+.pm-node-cv {
+  bottom: 18px;
+  right: 34px;
+  color: #c4b5fd;
+  animation:
+    pm-node-float-two 5.2s ease-in-out infinite;
+}
+.pm-node-att {
+  left: 5px;
+  top: 112px;
+  color: #6ee7b7;
+  animation:
+    pm-node-float-three 4.8s ease-in-out infinite;
+}
+.pm-intelligence-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.065),
+      rgba(255, 255, 255, 0.025)
+    );
+  backdrop-filter: blur(16px);
+  box-shadow:
+    inset 0 1px 0
+    rgba(255, 255, 255, 0.05);
+}
+.pm-tile-one {
+  animation:
+    pm-tile-drift-one 6s ease-in-out infinite;
+}
+.pm-tile-two {
+  animation:
+    pm-tile-drift-two 7s ease-in-out infinite;
+}
+.pm-tile-three {
+  animation:
+    pm-tile-drift-one 8s ease-in-out infinite reverse;
+}
+.pm-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: #22d3ee;
+  box-shadow:
+    0 0 0 0
+    rgba(34, 211, 238, 0.5);
+  animation:
+    pm-live-pulse 2s ease-out infinite;
+}
+.pm-live-dot-violet {
+  background: #a78bfa;
+}
+.pm-live-dot-green {
+  background: #34d399;
+}
+.pm-login-card-premium {
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.9);
+}
+.pm-login-card-premium::after {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 270deg,
+      rgba(56, 189, 248, 0.25) 310deg,
+      rgba(139, 92, 246, 0.18) 335deg,
+      transparent 360deg
+    );
+  animation:
+    pm-card-border-spin 8s linear infinite;
+}
+.pm-login-card-premium > * {
+  position: relative;
+  z-index: 2;
+}
+.pm-login-card-premium::before {
+  z-index: 1;
+  inset: 1px;
+  border-radius: 29px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(248, 250, 252, 0.93)
+    );
+}
+@keyframes pm-core-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@keyframes pm-core-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.055);
+  }
+}
+@keyframes pm-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pm-orbit-spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+@keyframes pm-node-float-one {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(-2deg);
+  }
+  50% {
+    transform:
+      translate3d(-8px, -10px, 0)
+      rotate(2deg);
+  }
+}
+@keyframes pm-node-float-two {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(2deg);
+  }
+  50% {
+    transform:
+      translate3d(9px, -8px, 0)
+      rotate(-2deg);
+  }
+}
+@keyframes pm-node-float-three {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(6px, 10px, 0);
+  }
+}
+@keyframes pm-tile-drift-one {
+  0%,
+  100% {
+    transform:
+      translateX(0);
+  }
+  50% {
+    transform:
+      translateX(6px);
+  }
+}
+@keyframes pm-tile-drift-two {
+  0%,
+  100% {
+    transform:
+      translateX(0);
+  }
+  50% {
+    transform:
+      translateX(-6px);
+  }
+}
+@keyframes pm-live-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0
+      rgba(34, 211, 238, 0.45);
+  }
+  75%,
+  100% {
+    box-shadow:
+      0 0 0 10px
+      rgba(34, 211, 238, 0);
+  }
+}
+@keyframes pm-card-border-spin {
+  from {
+    transform:
+      rotate(0deg);
+  }
+  to {
+    transform:
+      rotate(360deg);
+  }
+}
+
+/* ==========================================================
+   PeopleMind secure gateway - right side
+   ========================================================== */
+.pm-right-grid {
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    linear-gradient(
+      rgba(14, 165, 233, 0.035) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(14, 165, 233, 0.035) 1px,
+      transparent 1px
+    );
+  background-size: 52px 52px;
+  mask-image:
+    radial-gradient(
+      circle at center,
+      black 20%,
+      transparent 72%
+    );
+  animation:
+    pm-right-grid-move 28s linear infinite;
+}
+.pm-security-ring {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  border:
+    1px solid
+    rgba(14, 165, 233, 0.07);
+  opacity: 0.72;
+}
+.pm-security-ring-one {
+  width: 540px;
+  height: 540px;
+  animation:
+    pm-security-ring-spin 24s linear infinite;
+}
+.pm-security-ring-two {
+  width: 680px;
+  height: 680px;
+  border-style: dashed;
+  border-color:
+    rgba(139, 92, 246, 0.08);
+  animation:
+    pm-security-ring-spin-reverse 34s linear infinite;
+}
+.pm-security-ring-three {
+  width: 820px;
+  height: 820px;
+  border-color:
+    rgba(16, 185, 129, 0.04);
+  animation:
+    pm-security-ring-breathe 8s ease-in-out infinite;
+}
+.pm-security-ring-one::before,
+.pm-security-ring-two::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+}
+.pm-security-ring-one::before {
+  background: #38bdf8;
+  box-shadow:
+    0 0 20px
+    rgba(56, 189, 248, 0.8);
+}
+.pm-security-ring-two::before {
+  background: #a78bfa;
+  box-shadow:
+    0 0 18px
+    rgba(167, 139, 250, 0.7);
+}
+.pm-right-beam {
+  position: absolute;
+  pointer-events: none;
+  width: 2px;
+  height: 55%;
+  left: 50%;
+  top: -60%;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent,
+      rgba(56, 189, 248, 0.35),
+      rgba(56, 189, 248, 0.06),
+      transparent
+    );
+  filter: blur(0.4px);
+  animation:
+    pm-right-beam-scan 8s ease-in-out infinite;
+}
+.pm-secure-chip {
+  position: absolute;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  border:
+    1px solid
+    rgba(148, 163, 184, 0.18);
+  border-radius: 9999px;
+  background:
+    rgba(255, 255, 255, 0.58);
+  padding:
+    8px 12px;
+  backdrop-filter:
+    blur(14px);
+  box-shadow:
+    0 10px 35px
+    rgba(15, 23, 42, 0.06);
+  color:
+    #475569;
+  font-size:
+    10px;
+  font-weight:
+    800;
+  text-transform:
+    uppercase;
+  letter-spacing:
+    0.08em;
+}
+@media (min-width: 1280px) {
+  .pm-secure-chip {
+    display: flex;
+  }
+}
+.pm-secure-chip-one {
+  top: 16%;
+  left: 2%;
+  animation:
+    pm-secure-chip-one 6.5s ease-in-out infinite;
+}
+.pm-secure-chip-two {
+  right: 2%;
+  top: 24%;
+  animation:
+    pm-secure-chip-two 7.4s ease-in-out infinite;
+}
+.pm-secure-chip-three {
+  right: 3%;
+  bottom: 15%;
+  animation:
+    pm-secure-chip-three 8s ease-in-out infinite;
+}
+.pm-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius:
+    9999px;
+  box-shadow:
+    0 0 12px
+    currentColor;
+}
+.pm-network-dot {
+  position: absolute;
+  pointer-events: none;
+  width: 5px;
+  height: 5px;
+  border-radius:
+    9999px;
+  background:
+    #38bdf8;
+  box-shadow:
+    0 0 14px
+    rgba(56, 189, 248, 0.55);
+}
+.pm-network-dot-one {
+  left: 13%;
+  top: 35%;
+  animation:
+    pm-network-dot-one 9s ease-in-out infinite;
+}
+.pm-network-dot-two {
+  right: 15%;
+  top: 48%;
+  background:
+    #a78bfa;
+  animation:
+    pm-network-dot-two 11s ease-in-out infinite;
+}
+.pm-network-dot-three {
+  left: 21%;
+  bottom: 21%;
+  background:
+    #34d399;
+  animation:
+    pm-network-dot-three 10s ease-in-out infinite;
+}
+.pm-network-dot-four {
+  right: 23%;
+  bottom: 30%;
+  animation:
+    pm-network-dot-four 12s ease-in-out infinite;
+}
+/* stronger premium card halo */
+.pm-login-card-premium {
+  isolation: isolate;
+}
+.pm-login-card-premium {
+  box-shadow:
+    0 28px 90px
+      rgba(15, 23, 42, 0.15),
+    0 0 0 1px
+      rgba(255, 255, 255, 0.72),
+    0 0 55px
+      rgba(56, 189, 248, 0.08);
+  animation:
+    pm-login-card-hover 5s ease-in-out infinite;
+}
+.pm-login-card-premium::after {
+  opacity: 0.85;
+}
+.pm-login-card-premium:hover {
+  box-shadow:
+    0 34px 100px
+      rgba(15, 23, 42, 0.19),
+    0 0 0 1px
+      rgba(255, 255, 255, 0.9),
+    0 0 70px
+      rgba(56, 189, 248, 0.14);
+}
+@keyframes pm-right-grid-move {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      52px 52px,
+      52px 52px;
+  }
+}
+@keyframes pm-security-ring-spin {
+  from {
+    transform:
+      rotate(0deg);
+  }
+  to {
+    transform:
+      rotate(360deg);
+  }
+}
+@keyframes pm-security-ring-spin-reverse {
+  from {
+    transform:
+      rotate(360deg);
+  }
+  to {
+    transform:
+      rotate(0deg);
+  }
+}
+@keyframes pm-security-ring-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform:
+      scale(0.98);
+  }
+  50% {
+    opacity: 0.7;
+    transform:
+      scale(1.035);
+  }
+}
+@keyframes pm-right-beam-scan {
+  0%,
+  15% {
+    top: -65%;
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    top: 115%;
+    opacity: 0.3;
+  }
+  100% {
+    top: 115%;
+    opacity: 0;
+  }
+}
+@keyframes pm-secure-chip-one {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(8px, -7px, 0);
+  }
+}
+@keyframes pm-secure-chip-two {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(-9px, 8px, 0);
+  }
+}
+@keyframes pm-secure-chip-three {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(-7px, -8px, 0);
+  }
+}
+@keyframes pm-network-dot-one {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(65px, 24px, 0);
+  }
+}
+@keyframes pm-network-dot-two {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(-58px, 38px, 0);
+  }
+}
+@keyframes pm-network-dot-three {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(43px, -46px, 0);
+  }
+}
+@keyframes pm-network-dot-four {
+  0%,
+  100% {
+    transform:
+      translate3d(0, 0, 0);
+  }
+  50% {
+    transform:
+      translate3d(-45px, -35px, 0);
+  }
+}
+@keyframes pm-login-card-hover {
+  0%,
+  100% {
+    transform:
+      translateY(0);
+  }
+  50% {
+    transform:
+      translateY(-4px);
+  }
+}
+
+@media (
+  prefers-reduced-motion:
+  reduce
+) {
+  .pm-login-grid,
+  .pm-login-orb,
+  .pm-login-scan,
+  .pm-logo-pulse,
+  .pm-rise,
+  .pm-float-card,
+  .pm-light-orb,
+  .pm-login-button::before,
+  .pm-core-glow,
+  .pm-ai-core,
+  .pm-orbit,
+  .pm-node,
+  .pm-intelligence-tile,
+  .pm-live-dot,
+  .pm-login-card-premium::after,
+  .pm-right-grid,
+  .pm-security-ring,
+  .pm-right-beam,
+  .pm-secure-chip,
+  .pm-network-dot,
+  .pm-login-card-premium {
+    animation: none !important;
+  }
+  .pm-rise {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media print {
   @page {
     size: A4 portrait;
