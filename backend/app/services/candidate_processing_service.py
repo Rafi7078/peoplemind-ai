@@ -19,8 +19,10 @@ from backend.app.models.candidate_ats_result import (
     CandidateATSResult,
 )
 from backend.app.services.candidate_service import (
+    CandidateCVFileNotFoundError,
     CandidateCVNotFoundError,
     get_candidate_cv,
+    get_candidate_cv_file,
 )
 class CandidateCVProcessingError(
     ValueError
@@ -89,16 +91,18 @@ def process_candidate_cv(
         database=database,
         candidate_id=candidate_id,
     )
-    file_path = Path(
-        candidate.file_path
-    )
-    if not file_path.exists():
+    try:
+        _, file_path = get_candidate_cv_file(
+            database=database,
+            candidate_id=candidate_id,
+        )
+    except CandidateCVFileNotFoundError as error:
         candidate.status = "failed"
         database.commit()
         raise CandidateCVProcessingError(
             "The stored candidate CV "
             "could not be found."
-        )
+        ) from error
     candidate.status = "processing"
     database.commit()
     try:

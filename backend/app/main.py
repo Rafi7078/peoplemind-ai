@@ -35,6 +35,7 @@ from backend.app.api.routes.documents import (
 )
 from backend.app.core.config import settings
 from backend.app.db.database import Base, engine
+from backend.app.models.file_blob import FileBlob # noqa: F401
 from backend.app.models.candidate_cv import (  # noqa: F401
     CandidateCV,
 )

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         ge=5,
         le=1440,
     )
+    file_storage_backend: str = "local"
     document_upload_dir: str = "data/uploads"
     max_document_size_mb: int = Field(
         default=20,

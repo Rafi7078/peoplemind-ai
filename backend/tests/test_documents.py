@@ -4,13 +4,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from backend.app.core.config import settings
 from backend.app.core.security import create_access_token
 from backend.app.db.database import Base, get_db
 from backend.app.main import app
+from backend.app.models.document import Document
+from backend.app.models.file_blob import FileBlob
 from backend.app.models.user import User
 test_engine = create_engine(
     "sqlite://",
@@ -241,3 +243,126 @@ def test_admin_can_open_original_pdf_inline() -> None:
         file_response.headers["cache-control"]
         == "private, no-store, max-age=0"
     )
+
+def test_database_storage_restores_document_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_authorization_header()
+    pdf_content = blank_pdf_bytes(
+        page_count=1
+    )
+    with TestClient(app) as client:
+        upload_response = upload_pdf(
+            client=client,
+            headers=headers,
+            filename="database-policy.pdf",
+            content=pdf_content,
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        with TestingSessionLocal() as database:
+            document = database.get(
+                Document,
+                document_id,
+            )
+            assert document is not None
+            document_path = Path(
+                document.file_path
+            )
+            assert document_path.exists()
+            blob = database.scalar(
+                select(FileBlob).where(
+                    FileBlob.storage_key
+                    == (
+                        "documents/"
+                        f"{document.stored_name}"
+                    )
+                )
+            )
+            assert blob is not None
+            assert blob.content == pdf_content
+            document_path.unlink()
+        file_response = client.get(
+            f"/api/documents/{document_id}/file",
+            headers=headers,
+        )
+    assert file_response.status_code == 200
+    assert file_response.content == pdf_content
+def test_database_storage_restores_before_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_authorization_header()
+    with TestClient(app) as client:
+        upload_response = upload_pdf(
+            client=client,
+            headers=headers,
+            filename="restore-process.pdf",
+            content=blank_pdf_bytes(
+                page_count=1
+            ),
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        with TestingSessionLocal() as database:
+            document = database.get(
+                Document,
+                document_id,
+            )
+            assert document is not None
+            Path(
+                document.file_path
+            ).unlink()
+        process_response = client.post(
+            f"/api/documents/{document_id}/process",
+            headers=headers,
+        )
+    assert process_response.status_code == 200
+    assert (
+        process_response.json()["page_count"]
+        == 1
+    )
+def test_database_storage_delete_removes_blob(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_authorization_header()
+    with TestClient(app) as client:
+        upload_response = upload_pdf(
+            client=client,
+            headers=headers,
+            filename="delete-database.pdf",
+            content=blank_pdf_bytes(
+                page_count=1
+            ),
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        with TestingSessionLocal() as database:
+            blob = database.scalar(
+                select(FileBlob)
+            )
+            assert blob is not None
+        delete_response = client.delete(
+            f"/api/documents/{document_id}",
+            headers=headers,
+        )
+        assert delete_response.status_code == 200
+        with TestingSessionLocal() as database:
+            remaining_blob = database.scalar(
+                select(FileBlob)
+            )
+            assert remaining_blob is None

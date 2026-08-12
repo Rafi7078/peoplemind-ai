@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import (
     Session,
     sessionmaker,
 )
 from sqlalchemy.pool import StaticPool
+from backend.app.core.config import settings
 from backend.app.core.security import (
     create_access_token,
 )
@@ -19,6 +20,8 @@ from backend.app.db.database import (
     get_db,
 )
 from backend.app.main import app
+from backend.app.models.candidate_cv import CandidateCV
+from backend.app.models.file_blob import FileBlob
 from backend.app.models.user import User
 from backend.app.services import (
     candidate_service,
@@ -256,3 +259,134 @@ def test_admin_can_open_original_candidate_cv_inline():
     assert file_response.content.startswith(
         b"%PDF-"
     )
+
+def test_database_storage_restores_candidate_file(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_headers()
+    with TestClient(app) as client:
+        upload_response = upload_candidate(
+            client,
+            headers,
+        )
+        assert upload_response.status_code == 201
+        candidate_id = (
+            upload_response.json()["id"]
+        )
+        with TestingSessionLocal() as database:
+            candidate = database.get(
+                CandidateCV,
+                candidate_id,
+            )
+            assert candidate is not None
+            candidate_path = Path(
+                candidate.file_path
+            )
+            assert candidate_path.exists()
+            blob = database.scalar(
+                select(FileBlob).where(
+                    FileBlob.storage_key
+                    == (
+                        "candidates/"
+                        f"{candidate.stored_name}"
+                    )
+                )
+            )
+            assert blob is not None
+            original_bytes = (
+                candidate_path.read_bytes()
+            )
+            assert (
+                blob.content
+                == original_bytes
+            )
+            candidate_path.unlink()
+        file_response = client.get(
+            (
+                f"/api/candidates/"
+                f"{candidate_id}/file"
+            ),
+            headers=headers,
+        )
+    assert file_response.status_code == 200
+    assert file_response.content == original_bytes
+def test_database_storage_restores_candidate_before_processing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_headers()
+    with TestClient(app) as client:
+        upload_response = upload_candidate(
+            client,
+            headers,
+        )
+        assert upload_response.status_code == 201
+        candidate_id = (
+            upload_response.json()["id"]
+        )
+        with TestingSessionLocal() as database:
+            candidate = database.get(
+                CandidateCV,
+                candidate_id,
+            )
+            assert candidate is not None
+            Path(
+                candidate.file_path
+            ).unlink()
+        process_response = client.post(
+            (
+                f"/api/candidates/"
+                f"{candidate_id}/process"
+            ),
+            headers=headers,
+        )
+    assert process_response.status_code == 200
+    assert (
+        process_response.json()["page_count"]
+        == 1
+    )
+def test_database_storage_delete_removes_candidate_blob(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "file_storage_backend",
+        "database",
+    )
+    headers = create_admin_headers()
+    with TestClient(app) as client:
+        upload_response = upload_candidate(
+            client,
+            headers,
+        )
+        assert upload_response.status_code == 201
+        candidate_id = (
+            upload_response.json()["id"]
+        )
+        with TestingSessionLocal() as database:
+            blob = database.scalar(
+                select(FileBlob)
+            )
+            assert blob is not None
+        delete_response = client.delete(
+            (
+                f"/api/candidates/"
+                f"{candidate_id}"
+            ),
+            headers=headers,
+        )
+        assert delete_response.status_code == 204
+        with TestingSessionLocal() as database:
+            remaining_blob = database.scalar(
+                select(FileBlob)
+            )
+            assert remaining_blob is None

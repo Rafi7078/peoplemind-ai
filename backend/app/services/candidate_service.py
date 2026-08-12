@@ -31,6 +31,13 @@ from backend.app.models.job_match_result import (
 from backend.app.models.job_candidate_review import (
     JobCandidateReview,
 )
+from backend.app.services.file_storage_service import (
+    DatabaseFileIntegrityError,
+    DatabaseFileNotFoundError,
+    backup_local_file_to_database,
+    delete_database_file,
+    restore_database_file,
+)
 READ_CHUNK_SIZE = 1024 * 1024
 ALLOWED_PDF_CONTENT_TYPES = {
     "application/pdf",
@@ -212,6 +219,17 @@ async def store_candidate_cv(
         )
         try:
             database.add(candidate)
+            backup_local_file_to_database(
+                database,
+                category="candidates",
+                stored_name=stored_name,
+                local_path=final_path,
+                expected_sha256=file_digest,
+                mime_type=(
+                    upload.content_type
+                    or "application/pdf"
+                ),
+            )
             database.commit()
             database.refresh(candidate)
         except IntegrityError as error:
@@ -268,6 +286,22 @@ def get_candidate_cv_file(
         raise CandidateCVFileNotFoundError(
             "The candidate CV file path "
             "is outside the secure upload directory."
+        ) from error
+    try:
+        restore_database_file(
+            database,
+            category="candidates",
+            stored_name=candidate.stored_name,
+            local_path=candidate_path,
+            expected_sha256=candidate.sha256,
+        )
+    except (
+        DatabaseFileNotFoundError,
+        DatabaseFileIntegrityError,
+    ) as error:
+        raise CandidateCVFileNotFoundError(
+            "The stored candidate CV file "
+            "could not be found."
         ) from error
     if (
         not candidate_path.exists()
@@ -374,6 +408,11 @@ def delete_candidate_cv_permanently(
                 .candidate_cv_id
                 == candidate_id
             )
+        )
+        delete_database_file(
+            database,
+            category="candidates",
+            stored_name=candidate.stored_name,
         )
         database.delete(candidate)
         database.commit()

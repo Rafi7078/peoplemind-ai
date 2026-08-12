@@ -1,10 +1,14 @@
-﻿from pathlib import Path
+from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from backend.app.models.document import Document
 from backend.app.models.document_page import DocumentPage
+from backend.app.services.document_service import (
+    DocumentFileNotFoundError,
+    get_document_file,
+)
 class DocumentNotFoundError(ValueError):
     pass
 class DocumentProcessingError(ValueError):
@@ -40,13 +44,17 @@ def process_pdf_document(
     document_id: int,
 ) -> dict[str, int | str]:
     document = get_document(database, document_id)
-    file_path = Path(document.file_path)
-    if not file_path.exists():
+    try:
+        _, file_path = get_document_file(
+            database=database,
+            document_id=document_id,
+        )
+    except DocumentFileNotFoundError as error:
         document.status = "failed"
         database.commit()
         raise DocumentProcessingError(
             "The stored PDF file could not be found."
-        )
+        ) from error
     document.status = "processing"
     database.commit()
     try:

@@ -12,6 +12,13 @@ from backend.app.models.document_page import DocumentPage
 from backend.app.services.vector_store_service import (
     get_vector_collection,
 )
+from backend.app.services.file_storage_service import (
+    DatabaseFileIntegrityError,
+    DatabaseFileNotFoundError,
+    backup_local_file_to_database,
+    delete_database_file,
+    restore_database_file,
+)
 READ_CHUNK_SIZE = 1024 * 1024
 ALLOWED_PDF_CONTENT_TYPES = {
     "application/pdf",
@@ -112,6 +119,17 @@ async def store_pdf_document(
         )
         try:
             database.add(document)
+            backup_local_file_to_database(
+                database,
+                category="documents",
+                stored_name=stored_name,
+                local_path=final_path,
+                expected_sha256=file_digest,
+                mime_type=(
+                    upload.content_type
+                    or "application/pdf"
+                ),
+            )
             database.commit()
             database.refresh(document)
         except IntegrityError as error:
@@ -167,6 +185,21 @@ def get_document_file(
             upload_directory
         )
     except ValueError as error:
+        raise DocumentFileNotFoundError(
+            "The requested document file is unavailable."
+        ) from error
+    try:
+        restore_database_file(
+            database,
+            category="documents",
+            stored_name=document.stored_name,
+            local_path=document_path,
+            expected_sha256=document.sha256,
+        )
+    except (
+        DatabaseFileNotFoundError,
+        DatabaseFileIntegrityError,
+    ) as error:
         raise DocumentFileNotFoundError(
             "The requested document file is unavailable."
         ) from error
@@ -417,6 +450,11 @@ def delete_document(
                 DocumentPage.document_id
                 == document.id
             )
+        )
+        delete_database_file(
+            database,
+            category="documents",
+            stored_name=document.stored_name,
         )
         database.execute(
             delete(Document).where(
