@@ -215,6 +215,27 @@ export async function loadAttendanceHistory(
     );
   return response.data;
 }
+export async function deleteAttendanceHistoryReport(
+  attendanceDate: string,
+  teamId: number,
+  shiftId: number,
+  reason: string,
+): Promise<void> {
+  await apiClient.delete(
+    "/api/attendance/history/report",
+    {
+      params: {
+        attendance_date:
+          attendanceDate,
+        team_id: teamId,
+        shift_id: shiftId,
+      },
+      data: {
+        reason,
+      },
+    },
+  );
+}
 export async function loadAttendanceHistoryReport(
   attendanceDate: string,
   teamId: number,

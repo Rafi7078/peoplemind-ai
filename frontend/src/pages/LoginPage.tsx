@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useState,
 } from "react";
@@ -25,7 +25,7 @@ export function LoginPage() {
     useState(false);
   useEffect(() => {
     document.title =
-      "Admin Login | PeopleMind AI";
+      "Login | PeopleMind AI";
   }, []);
   if (isAuthenticated) {
     return (
@@ -123,14 +123,14 @@ export function LoginPage() {
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/70">
             <div>
               <p className="text-sm font-semibold text-sky-600">
-                SECURE ADMIN ACCESS
+                SECURE WORKSPACE ACCESS
               </p>
               <h2 className="mt-2 text-3xl font-bold text-slate-950">
                 Welcome back
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Sign in with your authorised
-                HR/Admin account.
+                PeopleMind account.
               </p>
             </div>
             <form

@@ -1,4 +1,3 @@
-
 from datetime import (
     date,
     datetime,
@@ -17,6 +16,25 @@ AttendanceStatus = Literal[
     "on_leave",
     "weekly_holiday",
 ]
+class DailyAttendanceSubmissionAuditRead(
+    BaseModel
+):
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+    id: int
+    attendance_date: date
+    team_id: int
+    shift_id: int
+    submitted_by_user_id: int
+    submitted_account_email: str
+    submitted_by_employee_id: int | None
+    submitted_by_employee_code: str | None
+    submitted_by_employee_name: str | None
+    submitted_at: datetime
+    last_updated_by_user_id: int
+    last_updated_account_email: str
+    last_updated_at: datetime
 class DailyRosterItem(BaseModel):
     employee_id: int
     employee_code: str
@@ -26,10 +44,7 @@ class DailyRosterItem(BaseModel):
     shift_id: int
     weekly_holidays: list[str]
     suggested_status: AttendanceStatus
-    saved_status: (
-        AttendanceStatus
-        | None
-    ) = None
+    saved_status: AttendanceStatus | None = None
     note: str | None = None
     record_id: int | None = None
     approved_leave_id: int | None = None
@@ -42,7 +57,13 @@ class DailyRosterRead(BaseModel):
     shift_id: int
     shift_name: str
     total_members: int
-    items: list[DailyRosterItem]
+    items: list[
+        DailyRosterItem
+    ]
+    submission_audit: (
+        DailyAttendanceSubmissionAuditRead
+        | None
+    ) = None
 class DailyAttendanceEntry(BaseModel):
     employee_id: int = Field(
         gt=0
@@ -69,6 +90,10 @@ class DailyAttendanceSubmit(BaseModel):
     )
     shift_id: int = Field(
         gt=0
+    )
+    submitted_by_employee_id: int | None = Field(
+        default=None,
+        gt=0,
     )
     entries: list[
         DailyAttendanceEntry
@@ -129,3 +154,7 @@ class DailyAttendanceSubmissionRead(
     records: list[
         DailyAttendanceRecordRead
     ]
+    submission_audit: (
+        DailyAttendanceSubmissionAuditRead
+        | None
+    ) = None

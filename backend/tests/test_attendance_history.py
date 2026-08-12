@@ -1076,3 +1076,295 @@ def test_pdf_export_supports_multiple_pages():
     )
     assert "Employee 1" in all_text
     assert "Employee 40" in all_text
+def test_delete_attendance_report_requires_authentication():
+    with TestClient(app) as client:
+        response = client.request(
+            "DELETE",
+            "/api/attendance/history/report",
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": 1,
+                "shift_id": 1,
+            },
+            json={
+                "reason":
+                    "Demo data",
+            },
+        )
+    assert response.status_code == 401
+def test_non_admin_cannot_delete_attendance_report():
+    email = (
+        "attendance-user@example.com"
+    )
+    with TestingSessionLocal() as database:
+        database.add(
+            User(
+                email=email,
+                hashed_password="unused",
+                is_active=True,
+                is_admin=False,
+            )
+        )
+        database.commit()
+    token = create_access_token(
+        subject=email
+    )
+    headers = {
+        "Authorization":
+            f"Bearer {token}"
+    }
+    with TestClient(app) as client:
+        response = client.request(
+            "DELETE",
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": 1,
+                "shift_id": 1,
+            },
+            json={
+                "reason":
+                    "Demo data",
+            },
+        )
+    assert response.status_code == 403
+def test_admin_can_delete_attendance_report():
+    from sqlalchemy import func
+    from backend.app.models.attendance_deletion_audit import (
+        AttendanceDeletionAudit,
+    )
+    from backend.app.models.attendance_record import (
+        AttendanceRecord,
+    )
+    from backend.app.models.attendance_record_snapshot import (
+        AttendanceRecordSnapshot,
+    )
+    from backend.app.models.attendance_submission_audit import (
+        AttendanceSubmissionAudit,
+    )
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=2
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-15"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "present",
+                "absent",
+            ],
+        )
+        assert saved.status_code == 200
+        deleted = client.request(
+            "DELETE",
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+            json={
+                "reason":
+                    "Demo/Test Data",
+            },
+        )
+        report_after = client.get(
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+        )
+    assert deleted.status_code == 200
+    assert report_after.status_code == 404
+    body = deleted.json()
+    assert (
+        body["deleted_record_count"]
+        == 2
+    )
+    assert (
+        body["reason"]
+        == "Demo/Test Data"
+    )
+    assert (
+        body["team_name"]
+        == "Labelmaster"
+    )
+    assert (
+        body["shift_name"]
+        == "Night"
+    )
+    with TestingSessionLocal() as database:
+        record_count = database.scalar(
+            select(
+                func.count(
+                    AttendanceRecord.id
+                )
+            )
+        )
+        snapshot_count = database.scalar(
+            select(
+                func.count(
+                    AttendanceRecordSnapshot.id
+                )
+            )
+        )
+        submission_audit_count = (
+            database.scalar(
+                select(
+                    func.count(
+                        AttendanceSubmissionAudit.id
+                    )
+                )
+            )
+        )
+        deletion_audit = database.scalar(
+            select(
+                AttendanceDeletionAudit
+            )
+        )
+        employee_count = database.scalar(
+            select(
+                func.count(
+                    AttendanceEmployee.id
+                )
+            )
+        )
+        team_count = database.scalar(
+            select(
+                func.count(
+                    AttendanceTeam.id
+                )
+            )
+        )
+        shift_count = database.scalar(
+            select(
+                func.count(
+                    AttendanceShift.id
+                )
+            )
+        )
+    assert record_count == 0
+    assert snapshot_count == 0
+    assert submission_audit_count == 0
+    assert deletion_audit is not None
+    assert (
+        deletion_audit.deleted_by_email
+        == "history-admin@example.com"
+    )
+    assert (
+        deletion_audit.reason
+        == "Demo/Test Data"
+    )
+    assert employee_count == 2
+    assert team_count == 1
+    assert shift_count == 1
+def test_delete_report_keeps_actual_leave_request():
+    from sqlalchemy import func
+    from backend.app.models.attendance_leave import (
+        AttendanceLeave,
+    )
+    from backend.app.models.attendance_record_leave_snapshot import (
+        AttendanceRecordLeaveSnapshot,
+    )
+    headers = create_admin_headers()
+    (
+        team_id,
+        shift_id,
+        employee_ids,
+    ) = create_foundation(
+        employee_count=1
+    )
+    leave_id = _create_approved_leave(
+        employee_id=employee_ids[0],
+        leave_type="casual",
+        from_date="2026-08-15",
+        to_date="2026-08-15",
+        reason="Personal work",
+    )
+    with TestClient(app) as client:
+        saved = submit_report(
+            client,
+            headers,
+            attendance_date=(
+                "2026-08-15"
+            ),
+            team_id=team_id,
+            shift_id=shift_id,
+            employee_ids=employee_ids,
+            statuses=[
+                "on_leave",
+            ],
+        )
+        assert saved.status_code == 200
+        deleted = client.request(
+            "DELETE",
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": team_id,
+                "shift_id": shift_id,
+            },
+            json={
+                "reason":
+                    "Remove demo attendance",
+            },
+        )
+    assert deleted.status_code == 200
+    with TestingSessionLocal() as database:
+        leave = database.get(
+            AttendanceLeave,
+            leave_id,
+        )
+        leave_snapshot_count = (
+            database.scalar(
+                select(
+                    func.count(
+                        AttendanceRecordLeaveSnapshot.id
+                    )
+                )
+            )
+        )
+    assert leave is not None
+    assert leave.status == "approved"
+    assert leave_snapshot_count == 0
+def test_delete_missing_report_returns_404():
+    headers = create_admin_headers()
+    with TestClient(app) as client:
+        response = client.request(
+            "DELETE",
+            "/api/attendance/history/report",
+            headers=headers,
+            params={
+                "attendance_date":
+                    "2026-08-15",
+                "team_id": 999,
+                "shift_id": 999,
+            },
+            json={
+                "reason":
+                    "Demo data",
+            },
+        )
+    assert response.status_code == 404

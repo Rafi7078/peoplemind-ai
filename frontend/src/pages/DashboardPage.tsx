@@ -1,43 +1,27 @@
 import {
   useEffect,
 } from "react";
-import { Link } from "react-router-dom";
+import {
+  Link,
+} from "react-router-dom";
 const modules = [
   {
     title: "Document Assistant",
     description:
       "Upload HR documents and receive grounded answers with page citations.",
-    status: "Available",
-    statusClass:
-      "bg-emerald-100 text-emerald-700",
     href: "/documents",
   },
   {
     title: "CV Intelligence",
     description:
       "Create job profiles, process candidate CVs and prepare evidence for ATS and job-match analysis.",
-    status: "Available",
-    statusClass:
-      "bg-emerald-100 text-emerald-700",
     href: "/cv-intelligence",
   },
   {
     title: "Attendance Management",
     description:
-      "Manage dynamic teams, shifts and employees before recording team-wise attendance.",
-    status: "Available",
-    statusClass:
-      "bg-emerald-100 text-emerald-700",
+      "Manage teams, shifts, employees, daily attendance, reports, leave and attendance analytics.",
     href: "/attendance",
-  },
-  {
-    title: "Email Assistant",
-    description:
-      "Generate professional HR drafts that require explicit approval.",
-    status: "Planned",
-    statusClass:
-      "bg-amber-100 text-amber-700",
-    href: null,
   },
 ];
 export function DashboardPage() {
@@ -81,45 +65,39 @@ export function DashboardPage() {
             HR modules
           </h2>
           <p className="mt-1 text-slate-600">
-            Access available modules and follow the
-            PeopleMind AI development roadmap.
+            Access the available PeopleMind AI
+            modules.
           </p>
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
-          {modules.map((module) => (
-            <article
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              key={module.title}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="text-lg font-bold text-slate-900">
-                  {module.title}
-                </h3>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${module.statusClass}`}
-                >
-                  {module.status}
-                </span>
-              </div>
-              <p className="mt-3 leading-6 text-slate-600">
-                {module.description}
-              </p>
-              <div className="mt-6">
-                {module.href ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {modules.map(
+            (module) => (
+              <article
+                className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                key={module.title}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    {module.title}
+                  </h3>
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Available
+                  </span>
+                </div>
+                <p className="mt-3 leading-6 text-slate-600">
+                  {module.description}
+                </p>
+                <div className="mt-6">
                   <Link
                     className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                     to={module.href}
                   >
                     Open module
                   </Link>
-                ) : (
-                  <span className="text-sm font-medium text-slate-400">
-                    Coming in a later stage
-                  </span>
-                )}
-              </div>
-            </article>
-          ))}
+                </div>
+              </article>
+            ),
+          )}
         </div>
       </section>
     </main>

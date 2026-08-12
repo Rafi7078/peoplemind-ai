@@ -1,3 +1,6 @@
+from backend.app.models.attendance_deletion_audit import (  # noqa: F401
+    AttendanceDeletionAudit,
+)
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -64,6 +67,12 @@ from backend.app.models.attendance_shift import (  # noqa: F401
 )
 from backend.app.models.attendance_employee import (  # noqa: F401
     AttendanceEmployee,
+)
+from backend.app.models.user_attendance_scope import (  # noqa: F401
+    UserAttendanceScope,
+)
+from backend.app.models.attendance_submission_audit import (  # noqa: F401
+    AttendanceSubmissionAudit,
 )
 from backend.app.models.attendance_record import (  # noqa: F401
     AttendanceRecord,

@@ -1,5 +1,9 @@
 
-from datetime import date
+from datetime import (
+    date,
+    datetime,
+    timezone,
+)
 from sqlalchemy import (
     select,
 )
@@ -19,8 +23,12 @@ from backend.app.models.attendance_record_leave_snapshot import (
 from backend.app.models.attendance_leave import (
     AttendanceLeave,
 )
+from backend.app.models.attendance_submission_audit import (
+    AttendanceSubmissionAudit,
+)
 from backend.app.schemas.attendance_daily import (
     DailyAttendanceRecordRead,
+    DailyAttendanceSubmissionAuditRead,
     DailyAttendanceSubmissionRead,
     DailyAttendanceSubmit,
     DailyAttendanceSummary,
@@ -39,6 +47,18 @@ class AttendanceRosterMismatchError(
 ):
     pass
 class AttendanceRecordConflictError(
+    ValueError
+):
+    pass
+class AttendanceSubmissionLockedError(
+    ValueError
+):
+    pass
+class AttendanceSubmitterRequiredError(
+    ValueError
+):
+    pass
+class AttendanceSubmitterScopeError(
     ValueError
 ):
     pass
@@ -183,6 +203,21 @@ def get_daily_roster(
         int,
         AttendanceLeave,
     ] = {}
+    submission_audit = database.scalar(
+        select(
+            AttendanceSubmissionAudit
+        ).where(
+            AttendanceSubmissionAudit
+            .attendance_date
+            == attendance_date,
+            AttendanceSubmissionAudit
+            .team_id
+            == team_id,
+            AttendanceSubmissionAudit
+            .shift_id
+            == shift_id,
+        )
+    )
     if employee_ids:
         records = list(
             database.scalars(
@@ -317,12 +352,25 @@ def get_daily_roster(
         shift_name=shift.name,
         total_members=len(items),
         items=items,
+        submission_audit=(
+            DailyAttendanceSubmissionAuditRead
+            .model_validate(
+                submission_audit
+            )
+            if submission_audit
+            is not None
+            else None
+        ),
     )
 def submit_daily_attendance(
     database: Session,
     *,
     request: DailyAttendanceSubmit,
     recorded_by_id: int,
+    recorded_by_email: str = "",
+    submitted_by_employee_id: int | None = None,
+    is_admin_submission: bool = True,
+    allow_update: bool = True,
 ) -> DailyAttendanceSubmissionRead:
     team = attendance_service.get_team(
         database,
@@ -366,6 +414,57 @@ def submit_daily_attendance(
     roster_ids = set(
         roster_by_id
     )
+    selected_submitter = None
+    if not is_admin_submission:
+        if submitted_by_employee_id is None:
+            raise (
+                AttendanceSubmitterRequiredError(
+                    "Select the employee who is "
+                    "submitting this attendance."
+                )
+            )
+        selected_submitter = (
+            roster_by_id.get(
+                submitted_by_employee_id
+            )
+        )
+        if selected_submitter is None:
+            raise (
+                AttendanceSubmitterScopeError(
+                    "The selected submitter must "
+                    "belong to this team and shift."
+                )
+            )
+    if (
+        not allow_update
+        and roster_ids
+    ):
+        existing_record_id = (
+            database.scalar(
+                select(
+                    AttendanceRecord.id
+                )
+                .where(
+                    AttendanceRecord
+                    .attendance_date
+                    == request.attendance_date,
+                    AttendanceRecord
+                    .employee_id
+                    .in_(roster_ids),
+                )
+                .limit(1)
+            )
+        )
+        if existing_record_id is not None:
+            raise (
+                AttendanceSubmissionLockedError(
+                    "Attendance for this date, "
+                    "team and shift has already "
+                    "been submitted. Employee "
+                    "accounts cannot edit a "
+                    "submitted roster."
+                )
+            )
     approved_leave_by_employee_id: dict[
         int,
         AttendanceLeave,
@@ -518,9 +617,89 @@ def submit_daily_attendance(
                 .get(record.employee_id)
             ),
         )
+    account_email = (
+        recorded_by_email.strip()
+        or f"user:{recorded_by_id}"
+    )
+    submission_audit = database.scalar(
+        select(
+            AttendanceSubmissionAudit
+        ).where(
+            AttendanceSubmissionAudit
+            .attendance_date
+            == request.attendance_date,
+            AttendanceSubmissionAudit
+            .team_id
+            == request.team_id,
+            AttendanceSubmissionAudit
+            .shift_id
+            == request.shift_id,
+        )
+    )
+    now = datetime.now(
+        timezone.utc
+    )
+    if submission_audit is None:
+        submission_audit = (
+            AttendanceSubmissionAudit(
+                attendance_date=(
+                    request.attendance_date
+                ),
+                team_id=request.team_id,
+                shift_id=request.shift_id,
+                submitted_by_user_id=(
+                    recorded_by_id
+                ),
+                submitted_account_email=(
+                    account_email
+                ),
+                submitted_by_employee_id=(
+                    selected_submitter.id
+                    if selected_submitter
+                    is not None
+                    else None
+                ),
+                submitted_by_employee_code=(
+                    selected_submitter
+                    .employee_code
+                    if selected_submitter
+                    is not None
+                    else None
+                ),
+                submitted_by_employee_name=(
+                    selected_submitter
+                    .full_name
+                    if selected_submitter
+                    is not None
+                    else None
+                ),
+                submitted_at=now,
+                last_updated_by_user_id=(
+                    recorded_by_id
+                ),
+                last_updated_account_email=(
+                    account_email
+                ),
+                last_updated_at=now,
+            )
+        )
+        database.add(
+            submission_audit
+        )
+    else:
+        submission_audit            .last_updated_by_user_id = (
+                recorded_by_id
+            )
+        submission_audit            .last_updated_account_email = (
+                account_email
+            )
+        submission_audit            .last_updated_at = now
     database.commit()
     for record in saved_records:
         database.refresh(record)
+    database.refresh(
+        submission_audit
+    )
     summary = build_summary(
         saved_records
     )
@@ -538,6 +717,12 @@ def submit_daily_attendance(
             .model_validate(record)
             for record in saved_records
         ],
+        submission_audit=(
+            DailyAttendanceSubmissionAuditRead
+            .model_validate(
+                submission_audit
+            )
+        ),
     )
 def build_summary(
     records: list[

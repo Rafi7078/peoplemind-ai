@@ -2,12 +2,26 @@ import {
   NavLink,
   Outlet,
 } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
+import {
+  useAuth,
+} from "../auth/useAuth";
+function navigationClass(
+  isActive: boolean,
+): string {
+  return [
+    "rounded-xl px-4 py-2 text-sm font-semibold transition",
+    isActive
+      ? "bg-slate-950 text-white"
+      : "text-slate-600 hover:bg-slate-100",
+  ].join(" ");
+}
 export function AppShell() {
   const {
     user,
     logout,
   } = useAuth();
+  const isAdmin =
+    user?.is_admin === true;
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="border-b border-slate-200 bg-white">
@@ -25,55 +39,55 @@ export function AppShell() {
               </p>
             </div>
           </div>
-          <nav className="order-3 flex w-full gap-2 sm:order-2 sm:w-auto">
+          <nav className="order-3 flex w-full flex-wrap gap-2 sm:order-2 sm:w-auto">
+            {isAdmin ? (
+              <>
+                <NavLink
+                  className={({
+                    isActive,
+                  }) =>
+                    navigationClass(
+                      isActive,
+                    )
+                  }
+                  end
+                  to="/"
+                >
+                  Dashboard
+                </NavLink>
+                <NavLink
+                  className={({
+                    isActive,
+                  }) =>
+                    navigationClass(
+                      isActive,
+                    )
+                  }
+                  to="/documents"
+                >
+                  Document Assistant
+                </NavLink>
+                <NavLink
+                  className={({
+                    isActive,
+                  }) =>
+                    navigationClass(
+                      isActive,
+                    )
+                  }
+                  to="/cv-intelligence"
+                >
+                  CV Intelligence
+                </NavLink>
+              </>
+            ) : null}
             <NavLink
-              className={({ isActive }) =>
-                [
-                  "rounded-xl px-4 py-2 text-sm font-semibold transition",
-                  isActive
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")
-              }
-              end
-              to="/"
-            >
-              Dashboard
-            </NavLink>
-            <NavLink
-              className={({ isActive }) =>
-                [
-                  "rounded-xl px-4 py-2 text-sm font-semibold transition",
-                  isActive
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")
-              }
-              to="/documents"
-            >
-              Document Assistant
-            </NavLink>
-            <NavLink
-              className={({ isActive }) =>
-                [
-                  "rounded-xl px-4 py-2 text-sm font-semibold transition",
-                  isActive
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")
-              }
-              to="/cv-intelligence"
-            >
-              CV Intelligence
-            </NavLink>
-            <NavLink
-              className={({ isActive }) =>
-                [
-                  "rounded-xl px-4 py-2 text-sm font-semibold transition",
-                  isActive
-                    ? "bg-slate-950 text-white"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")
+              className={({
+                isActive,
+              }) =>
+                navigationClass(
+                  isActive,
+                )
               }
               to="/attendance"
             >
@@ -83,7 +97,9 @@ export function AppShell() {
           <div className="order-2 flex items-center gap-4 sm:order-3">
             <div className="hidden text-right md:block">
               <p className="text-sm font-semibold text-slate-800">
-                HR Administrator
+                {isAdmin
+                  ? "HR Administrator"
+                  : "Attendance Account"}
               </p>
               <p className="text-xs text-slate-500">
                 {user?.email}

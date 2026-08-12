@@ -389,3 +389,54 @@ def read_attendance_report(
             ),
             detail=str(error),
         ) from error
+from backend.app.schemas.attendance_deletion import (
+    AttendanceDeletionRead,
+    AttendanceDeletionRequest,
+)
+from backend.app.services import (
+    attendance_delete_service,
+)
+@router.delete(
+    "/report",
+    response_model=AttendanceDeletionRead,
+    summary=(
+        "Delete a saved attendance report"
+    ),
+)
+def delete_attendance_report(
+    request: AttendanceDeletionRequest,
+    current_user: CurrentUserDependency,
+    database: DatabaseDependency,
+    attendance_date: date = Query(),
+    team_id: int = Query(gt=0),
+    shift_id: int = Query(gt=0),
+) -> AttendanceDeletionRead:
+    try:
+        return (
+            attendance_delete_service
+            .delete_attendance_report(
+                database=database,
+                attendance_date=(
+                    attendance_date
+                ),
+                team_id=team_id,
+                shift_id=shift_id,
+                reason=request.reason,
+                deleted_by_user_id=(
+                    current_user.id
+                ),
+                deleted_by_email=(
+                    current_user.email
+                ),
+            )
+        )
+    except (
+        attendance_history_service
+        .AttendanceHistoryNotFoundError
+    ) as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error

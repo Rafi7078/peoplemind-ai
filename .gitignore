@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.pyd
@@ -37,3 +37,4 @@ Thumbs.db
 logs/
 
 data/candidate_cvs/
+data/attendance_account_credentials_*_LOCAL.txt

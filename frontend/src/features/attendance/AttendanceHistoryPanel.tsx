@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import {
+  deleteAttendanceHistoryReport,
   downloadAttendanceHistoryCsv,
   downloadAttendanceHistoryPdf,
   loadAttendanceHistory,
@@ -93,7 +94,14 @@ function formatDate(
 function formatDateTime(
   value: string,
 ): string {
-  const date = new Date(value);
+  const normalizedValue =
+    value.endsWith("Z")
+    || /[+-]\d{2}:\d{2}$/.test(value)
+      ? value
+      : `${value}Z`;
+  const date = new Date(
+    normalizedValue,
+  );
   return new Intl.DateTimeFormat(
     "en-GB",
     {
@@ -102,6 +110,7 @@ function formatDateTime(
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Asia/Dhaka",
     },
   ).format(date);
 }
@@ -174,6 +183,20 @@ export function AttendanceHistoryPanel({
   const [
     isPdfExporting,
     setIsPdfExporting,
+  ] = useState(false);
+  const [
+    deleteTarget,
+    setDeleteTarget,
+  ] = useState<
+    AttendanceHistoryItem | null
+  >(null);
+  const [
+    deleteReason,
+    setDeleteReason,
+  ] = useState("");
+  const [
+    isDeleting,
+    setIsDeleting,
   ] = useState(false);
   const [
     errorMessage,
@@ -304,6 +327,60 @@ export function AttendanceHistoryPanel({
       );
     } finally {
       setIsReportLoading(false);
+    }
+  }
+  function openDeleteDialog(
+    item: AttendanceHistoryItem,
+  ): void {
+    setErrorMessage(null);
+    setDeleteTarget(item);
+    setDeleteReason("");
+  }
+  function closeDeleteDialog():
+  void {
+    if (isDeleting) {
+      return;
+    }
+    setDeleteTarget(null);
+    setDeleteReason("");
+  }
+  async function confirmDeleteReport():
+  Promise<void> {
+    if (!deleteTarget) {
+      return;
+    }
+    const cleanReason =
+      deleteReason.trim();
+    if (cleanReason.length < 3) {
+      setErrorMessage(
+        "Enter a deletion reason of "
+        + "at least 3 characters.",
+      );
+      return;
+    }
+    setErrorMessage(null);
+    setIsDeleting(true);
+    try {
+      await deleteAttendanceHistoryReport(
+        deleteTarget.attendance_date,
+        deleteTarget.team_id,
+        deleteTarget.shift_id,
+        cleanReason,
+      );
+      setDeleteTarget(null);
+      setDeleteReason("");
+      setSelectedReport(null);
+      setSelectedReportKey(null);
+      await loadHistory();
+    } catch (error) {
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Could not delete the attendance report.",
+        ),
+      );
+    } finally {
+      setIsDeleting(false);
     }
   }
   async function downloadCsv():
@@ -912,28 +989,44 @@ export function AttendanceHistoryPanel({
                           )}
                         </td>
                         <td className="border-b border-slate-100 px-4 py-4">
-                          <button
-                            className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50"
-                            disabled={
-                              isReportLoading
-                              && selectedReportKey
-                                === key
-                            }
-                            onClick={() => {
-                              void openReport(
-                                item,
-                              );
-                            }}
-                            type="button"
-                          >
-                            {
-                              isReportLoading
-                              && selectedReportKey
-                                === key
-                                ? "Opening..."
-                                : "View Report"
-                            }
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50"
+                              disabled={
+                                isReportLoading
+                                && selectedReportKey
+                                  === key
+                              }
+                              onClick={() => {
+                                void openReport(
+                                  item,
+                                );
+                              }}
+                              type="button"
+                            >
+                              {
+                                isReportLoading
+                                && selectedReportKey
+                                  === key
+                                  ? "Opening..."
+                                  : "View Report"
+                              }
+                            </button>
+                            <button
+                              className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              disabled={
+                                isDeleting
+                              }
+                              onClick={() => {
+                                openDeleteDialog(
+                                  item,
+                                );
+                              }}
+                              type="button"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1181,6 +1274,114 @@ export function AttendanceHistoryPanel({
             </table>
           </div>
         </article>
+      ) : null}
+      {deleteTarget ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+        >
+          <div className="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide text-red-600">
+                  Permanent action
+                </p>
+                <h2 className="mt-2 text-2xl font-bold text-slate-950">
+                  Delete Attendance Report
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  This removes the saved
+                  attendance report and its
+                  related attendance snapshots.
+                  Employees, teams, shifts and
+                  actual leave requests are kept.
+                </p>
+              </div>
+              <button
+                aria-label="Close delete dialog"
+                className="rounded-xl px-3 py-2 text-xl font-bold text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                disabled={isDeleting}
+                onClick={
+                  closeDeleteDialog
+                }
+                type="button"
+              >
+                X
+              </button>
+            </div>
+            <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
+              <p className="font-bold text-slate-950">
+                {formatDate(
+                  deleteTarget
+                    .attendance_date,
+                )}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                {deleteTarget.team_name}
+                {" | "}
+                {deleteTarget.shift_name}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {
+                  deleteTarget.summary
+                    .total_members
+                }
+                {" "}attendance record(s)
+              </p>
+            </div>
+            <label className="mt-6 block">
+              <span className="text-sm font-bold text-slate-700">
+                Deletion Reason *
+              </span>
+              <textarea
+                className="mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-red-400"
+                disabled={isDeleting}
+                maxLength={500}
+                onChange={(event) => {
+                  setDeleteReason(
+                    event.target.value,
+                  );
+                }}
+                placeholder="Example: Demo/Test Data"
+                value={deleteReason}
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                The reason and HR/Admin
+                identity are retained in the
+                deletion audit log.
+              </p>
+            </label>
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:opacity-50"
+                disabled={isDeleting}
+                onClick={
+                  closeDeleteDialog
+                }
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  isDeleting
+                  || deleteReason.trim()
+                    .length < 3
+                }
+                onClick={() => {
+                  void confirmDeleteReport();
+                }}
+                type="button"
+              >
+                {isDeleting
+                  ? "Deleting..."
+                  : "Delete Report"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );
