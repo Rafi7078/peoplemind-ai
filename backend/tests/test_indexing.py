@@ -1,4 +1,4 @@
-﻿from collections.abc import Generator
+from collections.abc import Generator
 from pathlib import Path
 import chromadb
 import pytest
@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 import backend.app.services.document_index_service as index_service
+from backend.app.core.config import settings
 from backend.app.core.security import create_access_token
 from backend.app.db.database import Base, get_db
 from backend.app.main import app
@@ -52,7 +53,7 @@ def prepare_index_environment(
     monkeypatch.setattr(
         index_service,
         "embed_texts",
-        lambda texts: [
+        lambda texts, **kwargs: [
             [1.0, 0.0, 0.0]
             for _ in texts
         ],
@@ -153,3 +154,173 @@ def test_admin_can_index_and_search_document() -> None:
     assert len(search_response.json()) > 0
     assert search_response.json()[0]["document_id"] == document_id
     assert search_response.json()[0]["page_number"] == 1
+
+def test_pgvector_backend_indexes_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "vector_backend",
+        "pgvector",
+    )
+    monkeypatch.setattr(
+        index_service,
+        "embed_texts",
+        lambda texts, **kwargs: [
+            [
+                0.0
+                for _ in range(768)
+            ]
+            for _ in texts
+        ],
+    )
+    delete_calls: list[int] = []
+    upsert_calls: list[dict] = []
+    monkeypatch.setattr(
+        index_service,
+        "delete_document_embeddings",
+        lambda database, *, document_id: (
+            delete_calls.append(
+                document_id
+            )
+        ),
+    )
+    def fake_upsert(
+        database,
+        *,
+        chunk_id,
+        vector_id,
+        document_id,
+        page_number,
+        chunk_index,
+        embedding,
+    ):
+        upsert_calls.append(
+            {
+                "chunk_id": chunk_id,
+                "vector_id": vector_id,
+                "document_id": document_id,
+                "page_number": page_number,
+                "chunk_index": chunk_index,
+                "dimension": len(
+                    embedding
+                ),
+            }
+        )
+    monkeypatch.setattr(
+        index_service,
+        "upsert_document_embedding",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        index_service,
+        "get_vector_collection",
+        lambda: (
+            (_ for _ in ()).throw(
+                AssertionError(
+                    "Chroma must not be used "
+                    "in pgvector mode."
+                )
+            )
+        ),
+    )
+    _, document_id = (
+        create_ready_document()
+    )
+    with TestingSessionLocal() as database:
+        result = index_service.index_document(
+            database=database,
+            document_id=document_id,
+        )
+    assert result["status"] == "indexed"
+    assert result["chunk_count"] > 0
+    assert result["vector_dimension"] == 768
+    assert delete_calls == [
+        document_id
+    ]
+    assert len(upsert_calls) == (
+        result["chunk_count"]
+    )
+    assert all(
+        call["chunk_id"] > 0
+        for call in upsert_calls
+    )
+    assert all(
+        call["document_id"]
+        == document_id
+        for call in upsert_calls
+    )
+    assert all(
+        call["dimension"] == 768
+        for call in upsert_calls
+    )
+def test_pgvector_backend_search_uses_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "vector_backend",
+        "pgvector",
+    )
+    monkeypatch.setattr(
+        index_service,
+        "embed_texts",
+        lambda texts, **kwargs: [
+            [
+                0.0
+                for _ in range(768)
+            ]
+            for _ in texts
+        ],
+    )
+    expected = [
+        {
+            "vector_id": "vector-pg-1",
+            "document_id": 7,
+            "document_name": "Policy.pdf",
+            "page_number": 2,
+            "chunk_index": 1,
+            "distance": 0.12,
+            "text": "Policy evidence.",
+        }
+    ]
+    def fake_search(
+        database,
+        *,
+        query_embedding,
+        top_k,
+        document_id,
+    ):
+        assert len(
+            query_embedding
+        ) == 768
+        assert top_k == 3
+        assert document_id == 7
+        return expected
+    monkeypatch.setattr(
+        index_service,
+        "search_document_embeddings",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        index_service,
+        "get_vector_collection",
+        lambda: (
+            (_ for _ in ()).throw(
+                AssertionError(
+                    "Chroma must not be used "
+                    "in pgvector mode."
+                )
+            )
+        ),
+    )
+    with TestingSessionLocal() as database:
+        results = (
+            index_service.search_document_chunks(
+                query="leave policy",
+                top_k=3,
+                document_id=7,
+                database=database,
+            )
+        )
+    assert results == expected

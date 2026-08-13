@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "qwen3:4b-instruct"
     ollama_embedding_model: str = "embeddinggemma"
+    embedding_provider: str = "ollama"
+    gemini_api_key: str = ""
+    gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_embedding_dimension: int = Field(
+        default=768,
+        ge=128,
+        le=3072,
+    )
     ollama_keep_alive: str = "30m"
     jwt_secret_key: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
@@ -34,6 +42,7 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
     )
+    vector_backend: str = "chroma"
     vector_store_dir: str = "data/vector_store"
     vector_collection_name: str = "peoplemind_hr_documents"
     chunk_size: int = Field(

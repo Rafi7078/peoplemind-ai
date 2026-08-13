@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 import backend.app.services.document_service as document_service
+from backend.app.core.config import settings
 from backend.app.core.security import create_access_token
 from backend.app.db.database import Base, get_db
 from backend.app.main import app
@@ -373,3 +374,138 @@ def test_missing_document_management_returns_404(
         )
     assert rename_response.status_code == 404
     assert delete_response.status_code == 404
+
+def test_pgvector_rename_does_not_use_chroma(
+    management_environment,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_directory, collection = (
+        management_environment
+    )
+    (
+        headers,
+        document_id,
+        _,
+        _,
+    ) = create_indexed_document(
+        upload_directory,
+        collection,
+    )
+    monkeypatch.setattr(
+        settings,
+        "vector_backend",
+        "pgvector",
+    )
+    monkeypatch.setattr(
+        document_service,
+        "get_vector_collection",
+        lambda: (
+            (_ for _ in ()).throw(
+                AssertionError(
+                    "Chroma must not be used "
+                    "for pgvector rename."
+                )
+            )
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/documents/{document_id}",
+            headers=headers,
+            json={
+                "original_name": (
+                    "Renamed PGVector Policy.pdf"
+                )
+            },
+        )
+    assert response.status_code == 200
+    assert (
+        response.json()["original_name"]
+        == "Renamed PGVector Policy.pdf"
+    )
+    with TestingSessionLocal() as database:
+        document = database.get(
+            Document,
+            document_id,
+        )
+        assert document is not None
+        assert (
+            document.original_name
+            == "Renamed PGVector Policy.pdf"
+        )
+def test_pgvector_delete_does_not_use_chroma(
+    management_environment,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_directory, collection = (
+        management_environment
+    )
+    (
+        headers,
+        document_id,
+        document_path,
+        _,
+    ) = create_indexed_document(
+        upload_directory,
+        collection,
+    )
+    monkeypatch.setattr(
+        settings,
+        "vector_backend",
+        "pgvector",
+    )
+    monkeypatch.setattr(
+        document_service,
+        "get_vector_collection",
+        lambda: (
+            (_ for _ in ()).throw(
+                AssertionError(
+                    "Chroma must not be used "
+                    "for pgvector delete."
+                )
+            )
+        ),
+    )
+    delete_calls: list[int] = []
+    monkeypatch.setattr(
+        document_service,
+        "delete_document_embeddings",
+        lambda database, *, document_id: (
+            delete_calls.append(
+                document_id
+            )
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.delete(
+            f"/api/documents/{document_id}",
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert delete_calls == [
+        document_id
+    ]
+    assert not document_path.exists()
+    with TestingSessionLocal() as database:
+        assert database.get(
+            Document,
+            document_id,
+        ) is None
+        chunks = list(
+            database.scalars(
+                select(DocumentChunk).where(
+                    DocumentChunk.document_id
+                    == document_id
+                )
+            ).all()
+        )
+        pages = list(
+            database.scalars(
+                select(DocumentPage).where(
+                    DocumentPage.document_id
+                    == document_id
+                )
+            ).all()
+        )
+        assert chunks == []
+        assert pages == []

@@ -2,6 +2,7 @@ import json
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
+from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.services.conversation_router_service import (
     get_conversation_reply,
@@ -42,6 +43,7 @@ def stream_document_answer(
     question: str,
     document_id: int | None,
     top_k: int,
+    database: Session | None = None,
 ) -> Iterator[str]:
     normalized_question = (
         question.strip()
@@ -73,6 +75,7 @@ def stream_document_answer(
                 query=normalized_question,
                 document_id=document_id,
                 top_k=top_k,
+                database=database,
             )
         )
     except DocumentSearchError:

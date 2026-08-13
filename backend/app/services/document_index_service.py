@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from backend.app.core.config import settings
@@ -8,7 +8,7 @@ from backend.app.models.document_page import DocumentPage
 from backend.app.services.chunking_service import (
     split_text_into_chunks,
 )
-from backend.app.services.ollama_embedding_service import (
+from backend.app.services.embedding_provider_service import (
     EmbeddingServiceError,
     embed_texts,
 )
@@ -18,6 +18,15 @@ from backend.app.services.pdf_extraction_service import (
 )
 from backend.app.services.vector_store_service import (
     get_vector_collection,
+)
+from backend.app.services.pgvector_service import (
+    PgVectorServiceError,
+    delete_document_embeddings,
+    search_document_embeddings,
+    upsert_document_embedding,
+)
+from backend.app.services.vector_backend_service import (
+    use_pgvector,
 )
 class DocumentIndexingError(RuntimeError):
     pass
@@ -30,7 +39,12 @@ def create_embedding_batches(
     batch_size = settings.embedding_batch_size
     for start in range(0, len(texts), batch_size):
         batch = texts[start : start + batch_size]
-        all_embeddings.extend(embed_texts(batch))
+        all_embeddings.extend(
+            embed_texts(
+                batch,
+                task_type="document",
+            )
+        )
     return all_embeddings
 def index_document(
     database: Session,
@@ -111,17 +125,26 @@ def index_document(
         for payload in chunk_payloads
     ]
     try:
-        collection = get_vector_collection()
-        existing_records = collection.get(
-            where={"document_id": document.id},
-        )
-        existing_vector_ids = list(
-            existing_records.get("ids") or []
-        )
-        if existing_vector_ids:
-            collection.delete(
-                ids=existing_vector_ids,
+        pgvector_backend = use_pgvector()
+        if pgvector_backend:
+            delete_document_embeddings(
+                database,
+                document_id=document.id,
             )
+        else:
+            collection = get_vector_collection()
+            existing_records = collection.get(
+                where={
+                    "document_id": document.id,
+                },
+            )
+            existing_vector_ids = list(
+                existing_records.get("ids") or []
+            )
+            if existing_vector_ids:
+                collection.delete(
+                    ids=existing_vector_ids,
+                )
         database.execute(
             delete(DocumentChunk).where(
                 DocumentChunk.document_id == document.id
@@ -140,20 +163,42 @@ def index_document(
                 )
             )
         database.add_all(chunk_models)
-        collection.upsert(
-            ids=new_vector_ids,
-            embeddings=embeddings,
-            documents=chunk_texts,
-            metadatas=[
-                {
-                    "document_id": payload["document_id"],
-                    "document_name": payload["document_name"],
-                    "page_number": payload["page_number"],
-                    "chunk_index": payload["chunk_index"],
-                }
-                for payload in chunk_payloads
-            ],
-        )
+        database.flush()
+        if pgvector_backend:
+            for (
+                chunk_model,
+                payload,
+                embedding,
+            ) in zip(
+                chunk_models,
+                chunk_payloads,
+                embeddings,
+                strict=True,
+            ):
+                upsert_document_embedding(
+                    database,
+                    chunk_id=chunk_model.id,
+                    vector_id=payload["vector_id"],
+                    document_id=payload["document_id"],
+                    page_number=payload["page_number"],
+                    chunk_index=payload["chunk_index"],
+                    embedding=embedding,
+                )
+        else:
+            collection.upsert(
+                ids=new_vector_ids,
+                embeddings=embeddings,
+                documents=chunk_texts,
+                metadatas=[
+                    {
+                        "document_id": payload["document_id"],
+                        "document_name": payload["document_name"],
+                        "page_number": payload["page_number"],
+                        "chunk_index": payload["chunk_index"],
+                    }
+                    for payload in chunk_payloads
+                ],
+            )
         document.status = "indexed"
         database.commit()
     except Exception as error:
@@ -198,6 +243,7 @@ def search_document_chunks(
     query: str,
     top_k: int,
     document_id: int | None = None,
+    database: Session | None = None,
 ) -> list[dict[str, Any]]:
     normalized_query = query.strip()
     if not normalized_query:
@@ -206,8 +252,26 @@ def search_document_chunks(
         )
     try:
         query_embedding = embed_texts(
-            [normalized_query]
+            [normalized_query],
+            task_type="query",
         )[0]
+        if use_pgvector():
+            if database is None:
+                raise DocumentSearchError(
+                    "A database session is required "
+                    "for pgvector search."
+                )
+            try:
+                return search_document_embeddings(
+                    database,
+                    query_embedding=query_embedding,
+                    top_k=top_k,
+                    document_id=document_id,
+                )
+            except PgVectorServiceError as error:
+                raise DocumentSearchError(
+                    str(error)
+                ) from error
         collection = get_vector_collection()
         if collection.count() == 0:
             return []
@@ -231,6 +295,8 @@ def search_document_chunks(
         raise DocumentSearchError(
             str(error)
         ) from error
+    except DocumentSearchError:
+        raise
     except Exception as error:
         raise DocumentSearchError(
             "The vector search could not be completed."

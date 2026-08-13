@@ -12,6 +12,12 @@ from backend.app.models.document_page import DocumentPage
 from backend.app.services.vector_store_service import (
     get_vector_collection,
 )
+from backend.app.services.pgvector_service import (
+    delete_document_embeddings,
+)
+from backend.app.services.vector_backend_service import (
+    use_pgvector,
+)
 from backend.app.services.file_storage_service import (
     DatabaseFileIntegrityError,
     DatabaseFileNotFoundError,
@@ -279,7 +285,10 @@ def rename_document(
     vector_ids: list[str] = []
     previous_metadatas: list[dict] = []
     try:
-        if document.status == "indexed":
+        if (
+            document.status == "indexed"
+            and not use_pgvector()
+        ):
             collection = get_vector_collection()
             vector_records = collection.get(
                 where={
@@ -373,7 +382,10 @@ def delete_document(
     vector_documents: list[str] = []
     vector_metadatas: list[dict] = []
     vector_embeddings: list = []
-    if document.status == "indexed":
+    if (
+        document.status == "indexed"
+        and not use_pgvector()
+    ):
         try:
             collection = get_vector_collection()
             vector_records = collection.get(
@@ -438,6 +450,11 @@ def delete_document(
         ):
             collection.delete(
                 ids=vector_ids,
+            )
+        if use_pgvector():
+            delete_document_embeddings(
+                database,
+                document_id=document.id,
             )
         database.execute(
             delete(DocumentChunk).where(

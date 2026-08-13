@@ -123,12 +123,14 @@ def read_documents(
 def search_documents(
     request: DocumentSearchRequest,
     current_user: CurrentUserDependency,
+    database: DatabaseDependency,
 ) -> list[DocumentSearchResult]:
     try:
         results = search_document_chunks(
             query=request.query,
             document_id=request.document_id,
             top_k=request.top_k,
+            database=database,
         )
     except DocumentSearchError as error:
         raise HTTPException(
@@ -147,6 +149,7 @@ def search_documents(
 def ask_documents(
     request: DocumentAskRequest,
     current_user: CurrentUserDependency,
+    database: DatabaseDependency,
 ) -> DocumentAnswerResponse:
     try:
         result = (
@@ -154,6 +157,7 @@ def ask_documents(
                 question=request.question,
                 document_id=request.document_id,
                 top_k=request.top_k,
+                database=database,
             )
         )
     except rag_answer_service.RagAnswerError as error:
@@ -172,6 +176,7 @@ def ask_documents(
 def stream_ask_documents(
     request: DocumentAskRequest,
     current_user: CurrentUserDependency,
+    database: DatabaseDependency,
 ) -> StreamingResponse:
     return StreamingResponse(
         rag_stream_service.stream_document_answer(

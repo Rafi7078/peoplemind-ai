@@ -1,6 +1,7 @@
 import re
 from time import perf_counter
 from typing import Any
+from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.services.conversation_router_service import (
     get_conversation_reply,
@@ -361,6 +362,7 @@ def answer_document_question(
     question: str,
     document_id: int | None,
     top_k: int,
+    database: Session | None = None,
 ) -> dict[str, Any]:
     normalized_question = (
         question.strip()
@@ -383,6 +385,7 @@ def answer_document_question(
                 query=normalized_question,
                 document_id=document_id,
                 top_k=top_k,
+                database=database,
             )
         )
     except DocumentSearchError as error:
